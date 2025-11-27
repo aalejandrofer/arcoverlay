@@ -9,6 +9,7 @@
 ### Your Ultimate In-Game Companion for Arc Raiders
 
 [🌐 Visit Website](https://www.arc-companion.xyz)
+[🌐 Discord](https://discord.gg/RzjPhXCXfH)
 
 
 [![Version](https://img.shields.io/badge/version-1.2.0-blue.svg)](https://github.com/Joopz0r/ArcCompanion-public/releases)
