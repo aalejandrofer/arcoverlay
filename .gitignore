@@ -7,7 +7,6 @@ venv/
 # Build
 build/
 dist/
-*.spec
 
 # User Data
 data/progress.json
