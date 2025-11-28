@@ -72,7 +72,7 @@ class ClickableBanner(QLabel):
 
 # --- NEW CLASS: ABOUT TAB ---
 class AboutTab(QWidget):
-    def __init__(self, app_version):
+    def __init__(self, app_version, check_update_func=None):
         super().__init__()
         
         layout = QVBoxLayout(self)
@@ -90,6 +90,25 @@ class AboutTab(QWidget):
         version_lbl.setStyleSheet("font-size: 16px; color: #ABB2BF;")
         version_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(version_lbl)
+
+        # --- UPDATE CHECK BUTTON ---
+        if check_update_func:
+            check_btn = QPushButton("Check for App Updates")
+            check_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            check_btn.setFixedWidth(200)
+            check_btn.setStyleSheet("""
+                QPushButton { background-color: #3E4451; color: white; border: 1px solid #555; padding: 6px; border-radius: 4px; font-weight: bold;}
+                QPushButton:hover { background-color: #4B5363; border-color: #777; }
+            """)
+            check_btn.clicked.connect(check_update_func)
+            
+            # Center the button
+            btn_layout = QHBoxLayout()
+            btn_layout.addStretch()
+            btn_layout.addWidget(check_btn)
+            btn_layout.addStretch()
+            layout.addLayout(btn_layout)
+        # ---------------------------
         
         layout.addSpacing(10)
         
@@ -139,13 +158,13 @@ class AboutTab(QWidget):
 • Added Multi-Language Support (Game Language setting).<br>
 • Added Settings Tab directly to the Hub.<br>
 • Added Discord & Support Banners.<br>
-• Added 'Show More' pagination to Item Database to prevent lag.<br>
+• Added 'Check for Updates' button in About tab.<br>
 <br>
 <b>Improvements:</b><br>
+• Fixed Quest Overlay closing immediately when mouse no close.<br>
 • Progress Hub now opens automatically on startup.<br>
 • Fixed duplicate items appearing in Item Database.<br>
 • Settings window is now embedded as a tab for easier access.<br>
-• Improved OCR logic for localized item names.<br>
 <br>
 <b>Bug Fixes:</b><br>
 • Fixed scrolling issue in Settings where mouse wheel changed values.<br>
@@ -158,7 +177,8 @@ class AboutTab(QWidget):
 class ProgressHubWindow(QWidget):
     progress_saved = pyqtSignal()
 
-    def __init__(self, data_manager, settings_callback=None, app_version="1.0.0"):
+    # ADDED app_update_checker_func argument
+    def __init__(self, data_manager, settings_callback=None, app_version="1.0.0", app_update_checker_func=None):
         super().__init__()
         self.data_manager = data_manager
 
@@ -223,7 +243,8 @@ class ProgressHubWindow(QWidget):
         self.settings_tab = SettingsWindow(on_save_callback=settings_callback)
         
         # --- NEW: ABOUT TAB ---
-        self.about_tab = AboutTab(app_version)
+        # Pass the update checker function to the About Tab
+        self.about_tab = AboutTab(app_version, app_update_checker_func)
 
         self.tabs.addTab(self.quest_tab, "Quests")
         self.tabs.addTab(self.hideout_tab, "Hideout")

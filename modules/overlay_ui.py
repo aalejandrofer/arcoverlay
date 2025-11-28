@@ -6,7 +6,7 @@ import math # Needed for distance calculation
 from .constants import Constants
 
 class BaseOverlay(QWidget):
-    def __init__(self, duration_ms, min_width=None, max_width=None, opacity=0.98):
+    def __init__(self, duration_ms, min_width=None, max_width=None, opacity=0.98, enable_distance_close=True):
         super().__init__()
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint | 
@@ -62,10 +62,12 @@ class BaseOverlay(QWidget):
         self.duration_timer.start(int(duration_ms))
 
         # --- MOUSE DISTANCE MONITOR (Radar) ---
-        # Checks every 100ms if the mouse has moved too far away
-        self.mouse_monitor_timer = QTimer(self)
-        self.mouse_monitor_timer.timeout.connect(self.check_mouse_distance)
-        self.mouse_monitor_timer.start(100) 
+        # Only enable this for overlays that spawn at the mouse (Item Check)
+        # Disable for fixed overlays (Quest Log)
+        if enable_distance_close:
+            self.mouse_monitor_timer = QTimer(self)
+            self.mouse_monitor_timer.timeout.connect(self.check_mouse_distance)
+            self.mouse_monitor_timer.start(100) 
         
         # Distance threshold in pixels (how far away to trigger close)
         self.close_threshold = 350 
@@ -151,7 +153,9 @@ class ItemOverlayUI:
         
         min_w = max(280, font_size * 25)
         max_w = max(400, font_size * 35)
-        overlay = BaseOverlay(duration, min_width=min_w, max_width=max_w) 
+        
+        # Item Overlay spawns at mouse, so we KEEP the distance check (Default: True)
+        overlay = BaseOverlay(duration, min_width=min_w, max_width=max_w, enable_distance_close=True) 
         
         rarity = item_data.get('rarity', 'Common')
         rarity_color = Constants.RARITY_COLORS.get(rarity, "#FFFFFF")
@@ -373,7 +377,9 @@ class QuestOverlayUI:
         opacity = user_settings.getint('QuestOverlay', 'opacity', fallback=95) / 100.0
         font_size = user_settings.getint('QuestOverlay', 'font_size', fallback=12)
 
-        overlay = BaseOverlay(duration, min_width=width, max_width=width, opacity=opacity)
+        # DISABLE Distance Close for Quest Overlay
+        # It spawns at the left side, often far from mouse
+        overlay = BaseOverlay(duration, min_width=width, max_width=width, opacity=opacity, enable_distance_close=False)
         overlay.set_border_color(Constants.RARITY_COLORS.get('Rare', '#4A5469')) 
         
         overlay.add_label("Tracked Quests", font_size + 2, True, Constants.RARITY_COLORS['Rare'])

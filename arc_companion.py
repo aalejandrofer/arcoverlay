@@ -1,3 +1,4 @@
+# --- START OF FILE arc_companion.py ---
 from __future__ import annotations
 import argparse, json, os, sys, re, configparser, time
 from dataclasses import dataclass
@@ -32,7 +33,7 @@ from modules.update_checker import UpdateChecker    # For Data Updates (Github/D
 from modules.app_updater import AppUpdateChecker    # For App Updates (Website/Tracking)
 
 # --- APP CONFIGURATION ---
-APP_VERSION = "1.2.0"
+APP_VERSION = "1.2.1"
 # REPLACE THIS with your actual website JSON URL
 APP_UPDATE_URL = "https://arc-companion.xyz/check_update.php" 
 # -------------------------
@@ -118,9 +119,13 @@ class ArcCompanionApp(QObject):
         self.reload_settings(is_initial_load=True)
 
         # 2. Initialize Windows
-        # Pass reload_settings to ProgressHub so the Settings Tab can use it
-        # NEW: Pass APP_VERSION so About Tab can display it
-        self.progress_hub = ProgressHubWindow(self.data_manager, self.reload_settings, APP_VERSION)
+        # NEW: Pass lambda for manual update check to Progress Hub
+        self.progress_hub = ProgressHubWindow(
+            self.data_manager, 
+            self.reload_settings, 
+            APP_VERSION,
+            lambda: self.check_for_app_updates(manual=True)
+        )
         self.progress_hub.progress_saved.connect(self.data_manager.reload_progress)
         
         # --- NEW: Open Progress Hub on Start ---
@@ -174,8 +179,8 @@ class ArcCompanionApp(QObject):
         # 5. CHECK: Does data exist? (For first run)
         self.ensure_data_exists()
 
-        # 6. CHECK: Is there a new app version? (From your website - with Tracking)
-        self.check_for_app_updates()
+        # 6. CHECK: Is there a new app version? (Automatic check on startup)
+        self.check_for_app_updates(manual=False)
 
     def show_settings_tab(self):
         self.progress_hub.show()
@@ -264,7 +269,12 @@ class ArcCompanionApp(QObject):
         
         # Re-create Progress Hub with new data
         self.progress_hub.cleanup()
-        self.progress_hub = ProgressHubWindow(self.data_manager, self.reload_settings, APP_VERSION)
+        self.progress_hub = ProgressHubWindow(
+            self.data_manager, 
+            self.reload_settings, 
+            APP_VERSION,
+            lambda: self.check_for_app_updates(manual=True)
+        )
         self.progress_hub.progress_saved.connect(self.data_manager.reload_progress)
         
         # Rebuild Tray Menu
@@ -294,7 +304,18 @@ class ArcCompanionApp(QObject):
         menu.addAction(exit_action)
 
     # --- APP UPDATE LOGIC (WEBSITE CHECK) ---
-    def check_for_app_updates(self):
+    def check_for_app_updates(self, manual=False):
+        # Prevent crash if thread object is already deleted (C++ side) but variable exists (Python side)
+        if hasattr(self, 'app_update_thread') and self.app_update_thread:
+            try:
+                if self.app_update_thread.isRunning():
+                     if manual:
+                         QMessageBox.information(None, "Check in Progress", "An update check is already in progress.")
+                     return
+            except RuntimeError:
+                # The underlying C++ object was deleted, so we can assume it's done.
+                self.app_update_thread = None
+
         self.app_update_thread = QThread()
         self.app_update_worker = AppUpdateChecker(APP_VERSION, APP_UPDATE_URL)
         self.app_update_worker.moveToThread(self.app_update_thread)
@@ -307,6 +328,14 @@ class ArcCompanionApp(QObject):
         self.app_update_worker.check_finished.connect(self.app_update_thread.quit)
         self.app_update_worker.update_available.connect(self.app_update_thread.quit)
         self.app_update_thread.finished.connect(self.app_update_thread.deleteLater)
+
+        # Handle Manual Feedback (No Update Found)
+        if manual:
+            # If the check finishes without finding an update (i.e. check_finished emits), show msg.
+            # Note: prompt_app_update will handle the update_available case.
+            self.app_update_worker.check_finished.connect(
+                lambda: QMessageBox.information(None, "Up to Date", f"You are running the latest version ({APP_VERSION}).")
+            )
 
         self.app_update_thread.start()
 
