@@ -2,7 +2,7 @@ from PyQt6.QtWidgets import QWidget, QLabel, QVBoxLayout, QFrame, QGraphicsDropS
 from PyQt6.QtCore import Qt, QTimer, QPoint
 from PyQt6.QtGui import QFont, QCursor, QColor
 import os
-import math # Needed for distance calculation
+import math 
 from .constants import Constants
 
 class BaseOverlay(QWidget):
@@ -17,15 +17,12 @@ class BaseOverlay(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setWindowOpacity(opacity)
         
-        # Use 0 margins for a clean "card" look with the gradient
         self.main_layout = QVBoxLayout(self)
         self.main_layout.setContentsMargins(0, 0, 0, 0)
         
         self.container = QFrame()
         self.container.setObjectName("OverlayFrame")
         
-        # Default styling: Linear Gradient Background + Subtle Border
-        # The 'border-top' will be overridden by set_border_color
         self.container.setStyleSheet(f"""
             #OverlayFrame {{
                 background-color: qlineargradient(spread:pad, x1:0, y1:0, x2:0, y2:1, 
@@ -37,7 +34,6 @@ class BaseOverlay(QWidget):
             QLabel {{ color: #E0E6ED; }}
         """)
         
-        # Add a subtle drop shadow to the window itself for pop
         shadow = QGraphicsDropShadowEffect(self)
         shadow.setBlurRadius(15)
         shadow.setXOffset(0)
@@ -46,7 +42,6 @@ class BaseOverlay(QWidget):
         self.container.setGraphicsEffect(shadow)
 
         self.container_layout = QVBoxLayout(self.container)
-        # Add padding inside the box so text isn't touching the edges
         self.container_layout.setContentsMargins(12, 10, 12, 10)
         self.container_layout.setSpacing(4) 
         
@@ -55,52 +50,34 @@ class BaseOverlay(QWidget):
         if min_width: self.container.setMinimumWidth(min_width)
         if max_width: self.container.setMaximumWidth(max_width)
         
-        # --- AUTO-CLOSE TIMER (Duration) ---
         self.duration_timer = QTimer(self)
         self.duration_timer.setSingleShot(True)
         self.duration_timer.timeout.connect(self.close)
         self.duration_timer.start(int(duration_ms))
 
-        # --- MOUSE DISTANCE MONITOR (Radar) ---
-        # Only enable this for overlays that spawn at the mouse (Item Check)
-        # Disable for fixed overlays (Quest Log)
         if enable_distance_close:
             self.mouse_monitor_timer = QTimer(self)
             self.mouse_monitor_timer.timeout.connect(self.check_mouse_distance)
             self.mouse_monitor_timer.start(100) 
         
-        # Distance threshold in pixels (how far away to trigger close)
         self.close_threshold = 350 
 
     def check_mouse_distance(self):
-        """Calculates distance from mouse to the nearest edge of the overlay."""
         mouse_pos = QCursor.pos()
         rect = self.frameGeometry()
         
-        # Calculate dx (distance in x axis)
-        if mouse_pos.x() < rect.left():
-            dx = rect.left() - mouse_pos.x()
-        elif mouse_pos.x() > rect.right():
-            dx = mouse_pos.x() - rect.right()
-        else:
-            dx = 0 # Mouse is within the horizontal range
+        if mouse_pos.x() < rect.left(): dx = rect.left() - mouse_pos.x()
+        elif mouse_pos.x() > rect.right(): dx = mouse_pos.x() - rect.right()
+        else: dx = 0
             
-        # Calculate dy (distance in y axis)
-        if mouse_pos.y() < rect.top():
-            dy = rect.top() - mouse_pos.y()
-        elif mouse_pos.y() > rect.bottom():
-            dy = mouse_pos.y() - rect.bottom()
-        else:
-            dy = 0 # Mouse is within the vertical range
+        if mouse_pos.y() < rect.top(): dy = rect.top() - mouse_pos.y()
+        elif mouse_pos.y() > rect.bottom(): dy = mouse_pos.y() - rect.bottom()
+        else: dy = 0
             
-        # Euclidean distance (Hypotenuse)
         distance = math.sqrt(dx*dx + dy*dy)
-        
-        if distance > self.close_threshold:
-            self.close()
+        if distance > self.close_threshold: self.close()
 
     def set_border_color(self, color_hex):
-        # Updates the Top Border to match rarity, keeps the rest subtle
         self.container.setStyleSheet(f"""
             #OverlayFrame {{
                 background-color: qlineargradient(spread:pad, x1:0, y1:0, x2:0, y2:1, 
@@ -121,9 +98,7 @@ class BaseOverlay(QWidget):
 
     def add_label(self, text, font_size=12, bold=False, color=None, indent=0):
         lbl = QLabel(text)
-        # FIX: Enable word wrap immediately so layout calculates height correctly
         lbl.setWordWrap(True)
-        # FIX: Ensure label tries to expand vertically if needed
         lbl.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
         
         font = QFont("Segoe UI", font_size)
@@ -147,14 +122,13 @@ class BaseOverlay(QWidget):
 
 class ItemOverlayUI:
     @staticmethod
-    def create_window(item_data, user_settings, blueprint_required, hideout_reqs, project_reqs, trade_info, data_manager, user_note="", lang_code="en"):
+    def create_window(item_data, user_settings, blueprint_required, hideout_reqs, project_reqs, trade_info, data_manager, user_note="", lang_code="en", stash_count=0, is_collected_blueprint=False):
         duration = user_settings.getfloat('ItemOverlay', 'duration_seconds', fallback=3.0) * 1000
         font_size = user_settings.getint('ItemOverlay', 'font_size', fallback=12)
         
         min_w = max(280, font_size * 25)
         max_w = max(400, font_size * 35)
         
-        # Item Overlay spawns at mouse, so we KEEP the distance check (Default: True)
         overlay = BaseOverlay(duration, min_width=min_w, max_width=max_w, enable_distance_close=True) 
         
         rarity = item_data.get('rarity', 'Common')
@@ -162,24 +136,25 @@ class ItemOverlayUI:
         
         overlay.set_border_color(rarity_color)
         
-        # --- HEADER SECTION ---
         item_id = item_data.get('id')
         tracked_items = data_manager.user_progress.get('tracked_items', [])
         is_tracked = item_id and item_id in tracked_items
         show_indicator = user_settings.getboolean('ItemOverlay', 'show_tracked_indicator', fallback=True)
         
-        # Get localized name
         display_name = data_manager.get_localized_name(item_data, lang_code)
         
         if is_tracked and show_indicator:
             display_name = f"★ {display_name}"
             
-        # Item Name in Rarity Color, slightly larger
+        # --- NEW: Collected Blueprint Tick ---
+        if is_collected_blueprint:
+            display_name += " <span style='color:#4CAF50'>✓</span>"
+        # -------------------------------------
+            
         overlay.add_label(display_name, font_size + 3, True, color=rarity_color)
         
         has_content = False
 
-        # --- Render Functions ---
         def render_trader():
             nonlocal has_content
             if user_settings.getboolean('ItemOverlay', 'show_trader_info', fallback=True) and trade_info:
@@ -189,10 +164,8 @@ class ItemOverlayUI:
                     trader, cost = trade.get('trader'), trade.get('cost', {})
                     cost_qty, cost_item_id = cost.get('quantity'), cost.get('itemId')
                     
-                    if cost_item_id == "coins":
-                        cost_name = "Coins"
-                    else:
-                        cost_name = data_manager.get_localized_name(cost_item_id, lang_code).title()
+                    if cost_item_id == "coins": cost_name = "Coins"
+                    else: cost_name = data_manager.get_localized_name(cost_item_id, lang_code).title()
 
                     overlay_text = f"{trader.title()}: {cost_qty}x {cost_name}"
                     overlay.add_label(overlay_text, font_size, False, "#98C379") 
@@ -202,32 +175,45 @@ class ItemOverlayUI:
             nonlocal has_content
             if user_settings.getboolean('ItemOverlay', 'show_price', fallback=True):
                 if has_content: overlay.add_separator()
-                
                 raw_val = item_data.get('value')
-                
-                # Format number with commas
                 if raw_val is not None:
-                    try:
-                        val_str = f"{int(raw_val):,}"
-                    except ValueError:
-                        val_str = str(raw_val)
-                else:
-                    val_str = "N/A"
+                    try: val_str = f"{int(raw_val):,}"
+                    except ValueError: val_str = str(raw_val)
+                else: val_str = "N/A"
                 
-                # Define paths
                 final_path = Constants.COIN_ICON_PATH
-
                 if final_path and os.path.exists(final_path):
-                    # Use Image: vertical-align: middle fixes floating issues
                     img_size = font_size + 4
                     safe_path = final_path.replace("\\", "/")
                     label_text = f"Price: <img src='{safe_path}' width='{img_size}' height='{img_size}' style='vertical-align: middle;'> <span style='color:#E5C07B'>{val_str}</span>"
                 else:
-                    # Fallback if image missing
                     label_text = f"Price: <span style='color:#E5C07B'>£{val_str}</span>"
                     
                 overlay.add_label(label_text, font_size, True, color=None) 
                 has_content = True
+
+        # --- NEW: Render Storage Logic ---
+        def render_storage():
+            nonlocal has_content
+            if user_settings.getboolean('ItemOverlay', 'show_storage_info', fallback=True):
+                # Don't show separation line if price was the previous item (grouped generally), 
+                # but if user reorders it, add separator if needed. 
+                # For cleaner UI, we just rely on the order list.
+                if has_content: overlay.add_separator()
+                
+                final_path = Constants.STORAGE_ICON_PATH
+                count_str = f"{stash_count:,}"
+                
+                if final_path and os.path.exists(final_path):
+                    img_size = font_size + 4
+                    safe_path = final_path.replace("\\", "/")
+                    label_text = f"Storage: <img src='{safe_path}' width='{img_size}' height='{img_size}' style='vertical-align: middle;'> <span style='color:#ABB2BF'>{count_str}</span>"
+                else:
+                    label_text = f"Storage: <span style='color:#ABB2BF'>{count_str}</span>"
+                
+                overlay.add_label(label_text, font_size, True, color=None)
+                has_content = True
+        # ---------------------------------
 
         def render_crafting():
             nonlocal has_content
@@ -239,20 +225,15 @@ class ItemOverlayUI:
                 if craft_bench or blueprint_required:
                     if has_content: overlay.add_separator()
                     overlay.add_label("Crafting", font_size - 1, True, "#5C6370") 
-                    if craft_bench:
-                        overlay.add_label(f"■ {craft_bench}{f' ({craft_time}s)' if craft_time else ''}", font_size, False, "#ABB2BF", 10)
-                    if blueprint_required:
-                        overlay.add_label("■ Blueprint Required", font_size, True, "#61AFEF", 10) 
+                    if craft_bench: overlay.add_label(f"■ {craft_bench}{f' ({craft_time}s)' if craft_time else ''}", font_size, False, "#ABB2BF", 10)
+                    if blueprint_required: overlay.add_label("■ Blueprint Required", font_size, True, "#61AFEF", 10) 
                     has_content = True
 
         def render_hideout():
             nonlocal has_content
-            if not user_settings.getboolean('ItemOverlay', 'show_hideout_reqs', fallback=True):
-                return
-
+            if not user_settings.getboolean('ItemOverlay', 'show_hideout_reqs', fallback=True): return
             show_future = user_settings.getboolean('ItemOverlay', 'show_all_future_reqs', fallback=False)
             filtered_reqs = [r for r in hideout_reqs if r[1] == 'next' or show_future] if hideout_reqs else []
-
             if filtered_reqs:
                 if has_content: overlay.add_separator()
                 overlay.add_label("Hideout Upgrade:", font_size - 1, True, "#5C6370")
@@ -263,12 +244,9 @@ class ItemOverlayUI:
 
         def render_project():
             nonlocal has_content
-            if not user_settings.getboolean('ItemOverlay', 'show_project_reqs', fallback=True):
-                return
-
+            if not user_settings.getboolean('ItemOverlay', 'show_project_reqs', fallback=True): return
             show_future = user_settings.getboolean('ItemOverlay', 'show_all_future_project_reqs', fallback=False)
             filtered_reqs = [r for r in project_reqs if r[1] == 'next' or show_future] if project_reqs else []
-
             if filtered_reqs:
                 if has_content: overlay.add_separator()
                 overlay.add_label("Project Request:", font_size - 1, True, "#5C6370")
@@ -284,13 +262,9 @@ class ItemOverlayUI:
                 if has_content: overlay.add_separator()
                 overlay.add_label("Recycles Into:", font_size - 1, True, "#5C6370")
                 for item_id_raw, quantity in recycles.items():
-                    # Get localized name
                     item_name = data_manager.get_localized_name(item_id_raw, lang_code)
-                    
-                    # Need details for rarity color
-                    comp_details = data_manager.get_item_by_name(data_manager.id_to_name_map.get(item_id_raw)) # Fallback lookup via English map
-                    if not comp_details: comp_details = data_manager.id_to_item_map.get(item_id_raw) # Direct lookup
-                    
+                    comp_details = data_manager.get_item_by_name(data_manager.id_to_name_map.get(item_id_raw)) 
+                    if not comp_details: comp_details = data_manager.id_to_item_map.get(item_id_raw)
                     comp_rarity = comp_details.get('rarity', 'Common') if comp_details else 'Common'
                     overlay.add_label(f"■ {quantity}x {item_name}", font_size, False, Constants.RARITY_COLORS.get(comp_rarity, "#FFFFFF"), 10)
                 has_content = True
@@ -302,13 +276,9 @@ class ItemOverlayUI:
                 if has_content: overlay.add_separator()
                 overlay.add_label("Salvages Into:", font_size - 1, True, "#5C6370")
                 for item_id_raw, quantity in salvages.items():
-                    # Get localized name
                     item_name = data_manager.get_localized_name(item_id_raw, lang_code)
-                    
-                    # Need details for rarity color
                     comp_details = data_manager.id_to_item_map.get(item_id_raw)
                     comp_rarity = comp_details.get('rarity', 'Common') if comp_details else 'Common'
-                    
                     overlay.add_label(f"■ {quantity}x {item_name}", font_size, False, Constants.RARITY_COLORS.get(comp_rarity, "#FFFFFF"), 10)
                 has_content = True
 
@@ -320,9 +290,9 @@ class ItemOverlayUI:
                 overlay.add_label(f"✎ {user_note}", font_size, False, "#FFEB3B", 10) 
                 has_content = True
 
-        # Map keys to functions
         renderers = {
             'price': render_price,
+            'storage': render_storage, # Added
             'trader': render_trader,
             'notes': render_notes,
             'crafting': render_crafting,
@@ -332,38 +302,25 @@ class ItemOverlayUI:
             'salvage': render_salvage
         }
 
-        # Determine Order
         saved_order_str = user_settings.get('ItemOverlay', 'section_order', fallback="")
         if saved_order_str:
             order = [x.strip() for x in saved_order_str.split(',') if x.strip() in renderers]
-            # Append missing
             for k in renderers:
                 if k not in order: order.append(k)
         else:
-            # Default order
-            order = ['price', 'trader', 'notes', 'crafting', 'hideout', 'project', 'recycle', 'salvage']
+            order = ['price', 'storage', 'trader', 'notes', 'crafting', 'hideout', 'project', 'recycle', 'salvage']
 
-        # Execute Renderers
         for key in order:
-            if key in renderers:
-                renderers[key]()
+            if key in renderers: renderers[key]()
 
-        # FIX: Calculate size now that everything is laid out and wrapped
         overlay.adjustSize()
-
-        # FIX: Ensure it stays on screen
         screen_geom = overlay.screen().geometry()
         cursor_pos = QCursor.pos()
         overlay_height, overlay_width = overlay.size().height(), overlay.size().width()
         pos_x, pos_y = cursor_pos.x() + 20, cursor_pos.y() + 20
         
-        # Adjust Y if it falls off bottom
-        if pos_y + overlay_height > screen_geom.height(): 
-            pos_y = screen_geom.height() - overlay_height - 10
-        
-        # Adjust X if it falls off right
-        if pos_x + overlay_width > screen_geom.width(): 
-            pos_x = cursor_pos.x() - overlay_width - 20
+        if pos_y + overlay_height > screen_geom.height(): pos_y = screen_geom.height() - overlay_height - 10
+        if pos_x + overlay_width > screen_geom.width(): pos_x = cursor_pos.x() - overlay_width - 20
         
         overlay.move(pos_x, pos_y)
         overlay.show()
@@ -371,14 +328,12 @@ class ItemOverlayUI:
 
 class QuestOverlayUI:
     @staticmethod
-    def create_window(tracked_quests, user_settings):
+    def create_window(tracked_quests, user_settings, data_manager=None, lang_code="en"):
         duration = user_settings.getfloat('QuestOverlay', 'duration_seconds', fallback=5.0) * 1000
         width = user_settings.getint('QuestOverlay', 'width', fallback=350)
         opacity = user_settings.getint('QuestOverlay', 'opacity', fallback=95) / 100.0
         font_size = user_settings.getint('QuestOverlay', 'font_size', fallback=12)
 
-        # DISABLE Distance Close for Quest Overlay
-        # It spawns at the left side, often far from mouse
         overlay = BaseOverlay(duration, min_width=width, max_width=width, opacity=opacity, enable_distance_close=False)
         overlay.set_border_color(Constants.RARITY_COLORS.get('Rare', '#4A5469')) 
         
@@ -389,9 +344,16 @@ class QuestOverlayUI:
             overlay.add_label("No quests tracked.", font_size)
         else:
             for i, quest in enumerate(tracked_quests):
-                if i > 0:
-                    overlay.add_separator()
-                overlay.add_label(quest['name'], font_size, True, Constants.QUEST_HEADER_COLOR)
+                if i > 0: overlay.add_separator()
+                
+                overlay.add_label(quest.get('name', 'Unknown'), font_size, True, Constants.QUEST_HEADER_COLOR)
+                
+                if data_manager:
+                    map_names = data_manager.get_quest_map_names(quest, lang_code=lang_code)
+                    if map_names:
+                        map_str = ", ".join(map_names)
+                        overlay.add_label(f"Map: {map_str}", font_size - 1, False, "#61AFEF")
+                
                 for objective in quest.get('objectives', []):
                     is_completed = objective in quest.get('objectives_completed', [])
                     color = "#5C6370" if is_completed else Constants.QUEST_OBJECTIVE_COLOR 

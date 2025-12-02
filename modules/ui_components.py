@@ -1,21 +1,57 @@
-from PyQt6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QProgressBar, QSizePolicy
-from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QPainter, QColor, QFont
+from PyQt6.QtWidgets import (
+    QWidget, QHBoxLayout, QPushButton, QProgressBar, QSizePolicy, 
+    QCheckBox, QFrame, QLabel, QTabWidget, QVBoxLayout
+)
+from PyQt6.QtCore import Qt, pyqtSignal, QSize, QUrl
+from PyQt6.QtGui import (
+    QPainter, QColor, QFont, QCursor, QKeySequence, 
+    QDesktopServices, QPixmap
+)
+import os
 
+# HEADER COMPONENT (New)
+class PageHeader(QFrame):
+    def __init__(self, title_text, parent=None):
+        super().__init__(parent)
+        self.setFixedHeight(50)
+        self.setObjectName("PageHeader")
+        # Styling for the header background and bottom border
+        self.setStyleSheet("""
+            #PageHeader {
+                background-color: #1A1F2B;
+                border-bottom: 2px solid #3E4451;
+            }
+        """)
+        
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(20, 0, 20, 0)
+        
+        # Title
+        self.title_lbl = QLabel(title_text)
+        self.title_lbl.setStyleSheet("font-size: 18px; font-weight: bold; color: #E5C07B; border: none; background: transparent;")
+        layout.addWidget(self.title_lbl)
+        
+        layout.addStretch()
+        
+        # Area for specific page controls (Checkboxes, Buttons)
+        self.controls_layout = QHBoxLayout()
+        self.controls_layout.setSpacing(15)
+        layout.addLayout(self.controls_layout)
+
+    def add_widget(self, widget):
+        self.controls_layout.addWidget(widget)
+
+# PROGRESS BARS
 class TextProgressBar(QProgressBar):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setTextVisible(False)
-        
-        # --- FIXED: Removed setFixedSize(100, 30) to prevent clipping/rendering issues ---
         self.setMinimumWidth(80)
         self.setMaximumHeight(30)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        # --- END FIX ---
 
     def paintEvent(self, event):
         super().paintEvent(event)
-        
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.TextAntialiasing)
         painter.setBackgroundMode(Qt.BGMode.TransparentMode)
@@ -27,13 +63,50 @@ class TextProgressBar(QProgressBar):
         painter.setPen(QColor("#FFFFFF"))
         
         text = f"{self.value()} / {self.maximum()}"
-        
-        # Since the size policy is now Expanding, the width is managed by the parent layout.
-        # AlignCenter is still the correct way to center the text.
         painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, text)
-        
         painter.end()
 
+class StashProgressBar(QProgressBar):
+    def __init__(self, parent=None, font_size=9):
+        super().__init__(parent)
+        self.setTextVisible(False)
+        self.real_count = 0
+        self.stack_size = 1
+        self.font_size = font_size
+        self.setStyleSheet("""
+            QProgressBar { border: 1px solid #3E4451; border-radius: 4px; background-color: #232834; text-align: center; }
+            QProgressBar::chunk { background-color: #4476ED; border-radius: 3px; }
+        """)
+
+    def update_status(self, count, stack_size):
+        self.real_count = count
+        self.stack_size = stack_size
+        safe_max = stack_size if stack_size > 0 else 1
+        
+        self.setMaximum(safe_max)
+        self.setValue(min(count, safe_max))
+        
+        if count >= safe_max:
+            self.setStyleSheet("""
+                QProgressBar { border: 1px solid #3E4451; border-radius: 4px; background-color: #232834; }
+                QProgressBar::chunk { background-color: #4CAF50; border-radius: 3px; } 
+            """)
+        else:
+            self.setStyleSheet("""
+                QProgressBar { border: 1px solid #3E4451; border-radius: 4px; background-color: #232834; }
+                QProgressBar::chunk { background-color: #4476ED; border-radius: 3px; }
+            """)
+        self.update()
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        painter = QPainter(self); painter.setRenderHint(QPainter.RenderHint.TextAntialiasing)
+        text = f"{self.real_count} / {self.stack_size}"
+        font = QFont("Segoe UI", self.font_size); font.setBold(True)
+        painter.setFont(font); painter.setPen(QColor("#FFFFFF"))
+        painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, text); painter.end()
+
+# INPUT CONTROLS
 class InventoryControl(QWidget):
     value_changed = pyqtSignal()
 
@@ -41,11 +114,8 @@ class InventoryControl(QWidget):
         super().__init__()
         self.value = initial_val
         self.max_val = max_val
-        
-        # Prevent the parent layout from stretching/shrinking this whole control
         self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         
-        # Dimensions
         BTN_SIZE = 30
         BTN_FONT = "font-size: 16px; font-weight: bold; padding: 0px;"
 
@@ -61,30 +131,25 @@ class InventoryControl(QWidget):
             b.setStyleSheet(BTN_FONT)
             return b
 
-        # -10 Button
         if show_extra_buttons:
             btn_m10 = make_btn("-10", 45)
             btn_m10.clicked.connect(lambda: self.change(-10))
             layout.addWidget(btn_m10)
 
-        # -1 Button
         btn_m1 = make_btn("-")
         btn_m1.clicked.connect(lambda: self.change(-1))
         layout.addWidget(btn_m1)
         
-        # --- Progress Bar ---
         self.pbar = TextProgressBar()
         self.pbar.setRange(0, self.max_val)
         self.pbar.setValue(self.value)
         self._update_style()
-        layout.addWidget(self.pbar) # This widget now expands horizontally within the control
+        layout.addWidget(self.pbar)
         
-        # +1 Button
         btn_p1 = make_btn("+")
         btn_p1.clicked.connect(lambda: self.change(1))
         layout.addWidget(btn_p1)
         
-        # +10 Button
         if show_extra_buttons:
             btn_p10 = make_btn("+10", 45)
             btn_p10.clicked.connect(lambda: self.change(10))
@@ -98,10 +163,133 @@ class InventoryControl(QWidget):
     def change(self, amount):
         old_value = self.value
         self.value = max(0, min(self.max_val, self.value + amount))
-        
         if self.value != old_value:
             self.pbar.setValue(self.value)
             self._update_style()
             self.value_changed.emit()
 
     def get_value(self): return self.value
+
+class ModernToggle(QCheckBox):
+    """A specific toggle switch style for modifiers."""
+    def __init__(self, text="", parent=None):
+        super().__init__(text, parent)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setStyleSheet("""
+            QCheckBox { spacing: 12px; color: #E0E6ED; font-size: 13px; padding: 2px; }
+            QCheckBox::indicator { width: 36px; height: 18px; border-radius: 9px; }
+            QCheckBox::indicator:unchecked { background-color: #232834; border: 1px solid #3E4451; }
+            QCheckBox::indicator:checked { background-color: #2E5C32; border: 1px solid #4CAF50; image: url(:/none); }
+        """)
+
+class HotkeyButton(QPushButton):
+    key_set = pyqtSignal(str)
+
+    def __init__(self, default_text=""):
+        super().__init__(default_text)
+        self.setCheckable(True)
+        self.current_key_string = default_text
+        self.setText(default_text if default_text else "Click to set...")
+        
+        self.normal_style = """
+            QPushButton {
+                background-color: #232834; color: #E0E6ED; border: 1px solid #3E4451;
+                padding: 6px 12px; text-align: center; border-radius: 4px;
+                font-family: 'Segoe UI', monospace; font-weight: bold;
+            }
+            QPushButton:hover { border: 1px solid #4476ED; background-color: #282D38; }
+        """
+        self.recording_style = """
+            QPushButton {
+                background-color: rgba(211, 47, 47, 0.2); color: #ef5350;
+                border: 1px solid #ef5350; padding: 6px 12px; text-align: center;
+                border-radius: 4px; font-weight: bold;
+            }
+        """
+        self.setStyleSheet(self.normal_style)
+        self.clicked.connect(self._on_click)
+
+    def _on_click(self):
+        self.setText("Press any key... (Esc to cancel)")
+        self.setStyleSheet(self.recording_style)
+
+    def keyPressEvent(self, event):
+        if not self.isChecked():
+            super().keyPressEvent(event); return
+        key = event.key()
+        if key == Qt.Key.Key_Escape:
+            self._cancel(); return
+        if key in (Qt.Key.Key_Backspace, Qt.Key.Key_Delete):
+            self.current_key_string = ""; self.setText("None"); self._finish(); return
+        if key in (Qt.Key.Key_Control, Qt.Key.Key_Shift, Qt.Key.Key_Alt, Qt.Key.Key_Meta):
+            return
+        
+        parts = []
+        modifiers = event.modifiers()
+        if modifiers & Qt.KeyboardModifier.ControlModifier: parts.append("ctrl")
+        if modifiers & Qt.KeyboardModifier.AltModifier:     parts.append("alt")
+        if modifiers & Qt.KeyboardModifier.ShiftModifier:   parts.append("shift")
+        key_text = QKeySequence(key).toString().lower()
+        parts.append(key_text)
+        
+        final_string = "+".join(parts)
+        self.current_key_string = final_string
+        self.setText(final_string)
+        self.key_set.emit(final_string)
+        self._finish()
+
+    def _cancel(self):
+        self.setChecked(False)
+        self.setText(self.current_key_string if self.current_key_string else "Click to set...")
+        self.setStyleSheet(self.normal_style)
+
+    def _finish(self):
+        self.setChecked(False)
+        self.setStyleSheet(self.normal_style)
+    
+    def set_hotkey(self, text):
+        self.current_key_string = text
+        self.setText(text if text else "Click to set...")
+    
+    def focusOutEvent(self, event):
+        if self.isChecked(): self._cancel()
+        super().focusOutEvent(event)
+
+# DISPLAY CONTAINERS
+class SettingsCard(QFrame):
+    """Container matching the Hub style (Dark Blue-Grey)."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setStyleSheet("QFrame { background-color: #1A1F2B; border-radius: 6px; border: 1px solid #333; }")
+
+class ClickableBanner(QLabel):
+    def __init__(self, image_path, target_url, fallback_text="Support!", bg_color="#333", parent=None):
+        super().__init__(parent)
+        self.target_url = target_url
+        self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self.original_pixmap = None
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        self.setMinimumHeight(90); self.setMaximumHeight(120)
+        self.setScaledContents(False)
+
+        if image_path and os.path.exists(image_path):
+            self.original_pixmap = QPixmap(image_path)
+            self.update_pixmap()
+            self.setStyleSheet("QLabel { border: 1px solid #3E4451; border-radius: 4px; background-color: #1A1F2B; } QLabel:hover { border: 1px solid #4476ED; }")
+        else:
+            self.setText(fallback_text)
+            self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.setStyleSheet(f"QLabel {{ background-color: {bg_color}; color: white; font-weight: bold; font-size: 16px; border-radius: 5px; border: 1px solid #3E4451; }} QLabel:hover {{ border: 1px solid #ffffff; background-color: {bg_color}dd; }}")
+
+    def resizeEvent(self, event):
+        if self.original_pixmap: self.update_pixmap()
+        super().resizeEvent(event)
+
+    def update_pixmap(self):
+        if not self.original_pixmap: return
+        scaled = self.original_pixmap.scaled(self.size(), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+        self.setPixmap(scaled)
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton: QDesktopServices.openUrl(QUrl(self.target_url))

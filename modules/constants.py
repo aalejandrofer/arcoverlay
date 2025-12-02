@@ -31,6 +31,7 @@ class Constants:
     ITEMS_DIR = os.path.join(DATA_DIR, 'items')
     HIDEOUT_DIR = os.path.join(DATA_DIR, 'hideout')
     QUESTS_DIR = os.path.join(DATA_DIR, 'quests')
+    MAPS_DIR = os.path.join(DATA_DIR, 'maps') 
     
     # --- TESSERACT LANGUAGES ---
     TESSDATA_DIR = os.path.join(DATA_DIR, 'tessdata')
@@ -57,6 +58,7 @@ class Constants:
     PROGRESS_FILE = os.path.join(DATA_DIR, 'progress.json')
     TRADES_FILE = os.path.join(DATA_DIR, 'trades.json') 
     PROJECTS_FILE = os.path.join(DATA_DIR, 'projects.json') 
+    MAPS_FILE = os.path.join(DATA_DIR, 'maps.json')
 
     # --- INTERNAL RESOURCES ---
     ICON_FILE = os.path.join(get_base_path(), 'arccompanion.ico')
@@ -66,14 +68,19 @@ class Constants:
     else:
         _ASSETS_DIR = os.path.join(os.path.abspath("."), "data", "images")
     
+    # Currency Icons
     _COIN_SVG = os.path.join(_ASSETS_DIR, 'coins.svg')
     _COIN_PNG = os.path.join(_ASSETS_DIR, 'coins.png')
-    
     COIN_ICON_PATH = _COIN_SVG if os.path.exists(_COIN_SVG) else _COIN_PNG
+    
+    # Storage Icons (New)
+    _STORAGE_SVG = os.path.join(_ASSETS_DIR, 'storage.svg')
+    _STORAGE_PNG = os.path.join(_ASSETS_DIR, 'storage.png')
+    STORAGE_ICON_PATH = _STORAGE_SVG if os.path.exists(_STORAGE_SVG) else _STORAGE_PNG
     
     # Banners
     BANNER_IMAGE_PATH = os.path.join(_ASSETS_DIR, 'support_banner.png')
-    DISCORD_IMAGE_PATH = os.path.join(_ASSETS_DIR, 'discord_banner.png') # NEW
+    DISCORD_IMAGE_PATH = os.path.join(_ASSETS_DIR, 'discord_banner.png')
 
     # PyQt Stylesheet
     DARK_THEME_QSS = """

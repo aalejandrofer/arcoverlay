@@ -1,126 +1,26 @@
-from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
-                             QLineEdit, QCheckBox, QSlider, QPushButton, 
-                             QScrollArea, QMessageBox, QListWidget, QListWidgetItem, QAbstractItemView, QComboBox)
-from PyQt6.QtCore import Qt, QThread, pyqtSignal
-from PyQt6.QtGui import QIcon, QKeySequence
-import configparser
+from PyQt6.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
+    QSlider, QPushButton, QComboBox, QStackedWidget, QFrame, 
+    QGraphicsDropShadowEffect, QMessageBox, QTabWidget, QListWidget, QListWidgetItem,
+    QAbstractItemView
+)
+from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtGui import QColor, QFont
 import os
+
 from .constants import Constants
-from .update_checker import UpdateChecker
+from .ui_components import ModernToggle, SettingsCard, HotkeyButton
+from .base_page import BasePage
 
-# --- CUSTOM WIDGETS TO PREVENT ACCIDENTAL SCROLLING ---
-class NoScrollComboBox(QComboBox):
-    def wheelEvent(self, event):
-        # Ignore the wheel event so it propagates to the parent ScrollArea
-        event.ignore()
-
-class NoScrollSlider(QSlider):
-    def wheelEvent(self, event):
-        # Ignore the wheel event so it propagates to the parent ScrollArea
-        event.ignore()
-
-class HotkeyButton(QPushButton):
-    """
-    A custom button that captures key presses and formats them as strings
-    compatible with the 'keyboard' library (e.g., 'ctrl+alt+e').
-    """
-    key_set = pyqtSignal(str)
-
-    def __init__(self, default_text=""):
-        super().__init__(default_text)
-        self.setCheckable(True)
-        self.current_key_string = default_text
-        self.setText(default_text if default_text else "Click to set...")
-        
-        self.normal_style = """
-            QPushButton {
-                background-color: #232834;
-                color: #E0E6ED;
-                border: 1px solid #3E4451;
-                padding: 4px;
-                text-align: left;
-                border-radius: 4px;
-                font-size: 12px;
-            }
-            QPushButton:hover { background-color: #4B5363; }
-        """
-        self.recording_style = """
-            QPushButton {
-                background-color: #722f37; 
-                color: #ffffff;
-                border: 1px solid #ff4444;
-                padding: 4px;
-                text-align: center;
-                border-radius: 4px;
-                font-size: 12px;
-            }
-        """
-        self.setStyleSheet(self.normal_style)
-        self.clicked.connect(self._on_click)
-
-    def _on_click(self):
-        self.setText("Press keys... (Esc to cancel)")
-        self.setStyleSheet(self.recording_style)
-
-    def keyPressEvent(self, event):
-        if not self.isChecked():
-            super().keyPressEvent(event)
-            return
-
-        key = event.key()
-        
-        if key == Qt.Key.Key_Escape:
-            self.setChecked(False)
-            self.setText(self.current_key_string if self.current_key_string else "Click to set...")
-            self.setStyleSheet(self.normal_style)
-            return
-
-        if key in (Qt.Key.Key_Backspace, Qt.Key.Key_Delete):
-            self.current_key_string = ""
-            self.setText("None")
-            self.setChecked(False)
-            self.setStyleSheet(self.normal_style)
-            return
-
-        if key in (Qt.Key.Key_Control, Qt.Key.Key_Shift, Qt.Key.Key_Alt, Qt.Key.Key_Meta):
-            return
-
-        parts = []
-        modifiers = event.modifiers()
-        
-        if modifiers & Qt.KeyboardModifier.ControlModifier: parts.append("ctrl")
-        if modifiers & Qt.KeyboardModifier.AltModifier:     parts.append("alt")
-        if modifiers & Qt.KeyboardModifier.ShiftModifier:   parts.append("shift")
-
-        key_text = QKeySequence(key).toString().lower()
-        parts.append(key_text)
-
-        final_string = "+".join(parts)
-        
-        self.current_key_string = final_string
-        self.setText(final_string)
-        self.setChecked(False) 
-        self.setStyleSheet(self.normal_style)
-        self.key_set.emit(final_string)
-
-    def focusOutEvent(self, event):
-        if self.isChecked():
-            self.setChecked(False)
-            self.setText(self.current_key_string if self.current_key_string else "Click to set...")
-            self.setStyleSheet(self.normal_style)
-        super().focusOutEvent(event)
+class SettingsWindow(BasePage):
+    # Signals
+    request_data_update = pyqtSignal()
+    request_lang_download = pyqtSignal(str)
+    request_app_update = pyqtSignal()
     
-    def set_hotkey(self, text):
-        self.current_key_string = text
-        self.setText(text if text else "Click to set...")
-
-
-class SettingsWindow(QWidget):
-    start_download = pyqtSignal(list)
-    start_language_download = pyqtSignal(str)
-
     SECTIONS = {
         'price': ('Price', 'show_price'),
+        'storage': ('Storage Count', 'show_storage_info'),
         'trader': ('Trader Info', 'show_trader_info'),
         'notes': ('User Notes', 'show_notes'),
         'crafting': ('Crafting Info', 'show_crafting_info'),
@@ -129,337 +29,392 @@ class SettingsWindow(QWidget):
         'recycle': ('Recycles Into', 'show_recycles_into'),
         'salvage': ('Salvages Into', 'show_salvages_into')
     }
-    
-    DEFAULT_ORDER = ['price', 'trader', 'notes', 'crafting', 'hideout', 'project', 'recycle', 'salvage']
+    DEFAULT_ORDER = ['price', 'storage', 'trader', 'notes', 'crafting', 'hideout', 'project', 'recycle', 'salvage']
 
-    def __init__(self, on_save_callback=None):
-        super().__init__()
+    def __init__(self, config_manager, on_save_callback=None):
+        super().__init__("Application Settings") 
+        self.cfg = config_manager
         self.on_save_callback = on_save_callback
-        
-        # Apply Global Theme + Specific Overrides
-        compact_style = Constants.DARK_THEME_QSS + """
-            QWidget { font-size: 13px; }
-            QLabel[objectName="Header"] {
-                font-size: 15px; margin-top: 5px; padding-bottom: 2px;
-            }
-            QCheckBox { spacing: 4px; }
-            QCheckBox::indicator:checked, QListView::indicator:checked {
-                background-color: #98C379; border: 1px solid #98C379; border-radius: 2px; image: url(none); 
-            }
-            QCheckBox::indicator:unchecked, QListView::indicator:unchecked {
-                background-color: #2C313C; border: 1px solid #3E4451; border-radius: 2px;
-            }
-        """
-        self.setStyleSheet(compact_style)
-        
-        self.config = configparser.ConfigParser()
         
         self.start_hotkey_price = ""
         self.start_hotkey_quest = ""
-        
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 10, 10, 10)
-        
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        
-        self.scroll_content = QWidget()
-        self.scroll_content.setObjectName("scroll_content")
-        
-        self.scroll_layout = QVBoxLayout(self.scroll_content)
-        self.scroll_layout.setSpacing(6) 
-        scroll.setWidget(self.scroll_content)
-        layout.addWidget(scroll)
+        self.preview_widgets = {} 
 
-        # --- General Settings ---
-        self.add_header("General Settings")
-        # Use NoScrollComboBox to prevent accidental scrolling changes
-        self.lang_combo = NoScrollComboBox()
-        self.lang_combo.addItems(sorted(list(Constants.LANGUAGES.keys())))
-        self.add_labeled_widget("Game Language:", self.lang_combo)
-
-        # --- Update Section (MOVED HERE) ---
-        self.add_header("Data Updates")
-        update_layout = QHBoxLayout()
-        self.update_status_label = QLabel("Ready to check for updates.")
-        self.check_update_button = QPushButton("Check for Updates")
-        self.check_update_button.setFixedHeight(28) 
-        self.check_update_button.clicked.connect(self._on_check_button_clicked)
-        update_layout.addWidget(self.update_status_label, 1)
-        update_layout.addWidget(self.check_update_button)
-        self.scroll_layout.addLayout(update_layout)
-
-        # --- Hotkeys ---
-        self.add_header("Hotkeys")
-        self.hotkey_btn = self.add_hotkey_selector("Item Info Hotkey:")
-        self.quest_hotkey_btn = self.add_hotkey_selector("Quest Log Hotkey:")
-
-        # --- Item Overlay ---
-        self.add_header("Item Overlay Settings")
-        self.item_font_size = self.add_slider("Font Size:", 8, 24, 12, "pt")
-        self.item_duration = self.add_slider("Duration:", 1, 10, 3, "s", float_scale=True)
-        
-        lbl_hint = QLabel("Drag items to reorder. Uncheck to hide.")
-        lbl_hint.setStyleSheet("color: #ABB2BF; font-style: italic; font-size: 11px;")
-        self.scroll_layout.addWidget(lbl_hint)
-
-        self.overlay_order_list = QListWidget()
-        self.overlay_order_list.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
-        self.overlay_order_list.setDefaultDropAction(Qt.DropAction.MoveAction)
-        self.overlay_order_list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-        self.overlay_order_list.setStyleSheet("""
-            QListWidget { background-color: #232834; border: 1px solid #3E4451; border-radius: 4px; padding: 5px; }
-            QListWidget::item { padding: 5px; background-color: #2C313C; border-bottom: 1px solid #3E4451; color: #E0E6ED; }
-            QListWidget::item:selected { background-color: #3E4451; }
-            QListWidget::item:hover { background-color: #323842; }
-        """)
-        self.overlay_order_list.setFixedHeight(260) 
-        self.scroll_layout.addWidget(self.overlay_order_list)
-
-        self.chk_future_hideout = self.add_checkbox("Show Future Hideout Reqs (Modifier)")
-        self.chk_future_project = self.add_checkbox("Show Future Project Reqs (Modifier)")
-
-        # --- Quest Overlay ---
-        self.add_header("Quest Overlay Settings")
-        self.quest_font_size = self.add_slider("Font Size:", 8, 24, 12, "pt")
-        self.quest_width = self.add_slider("Width:", 200, 600, 350, "px")
-        self.quest_opacity = self.add_slider("Opacity:", 30, 100, 95, "%")
-        self.quest_duration = self.add_slider("Duration:", 1, 20, 5, "s", float_scale=True)
-
-        self.scroll_layout.addStretch()
-
-        # --- Buttons ---
-        btn_layout = QHBoxLayout()
-        save_btn = QPushButton("Save Settings")
-        save_btn.setFixedHeight(30)
-        save_btn.setObjectName("action_button_green")
-        save_btn.clicked.connect(self.save_settings)
-        
-        # Changed "Cancel" to "Revert" since it's a tab now
-        revert_btn = QPushButton("Revert")
-        revert_btn.setFixedHeight(30)
-        revert_btn.setObjectName("action_button_red") 
-        revert_btn.clicked.connect(self.load_settings)
-        
-        btn_layout.addWidget(save_btn)
-        btn_layout.addWidget(revert_btn)
-        layout.addLayout(btn_layout)
-
+        self.init_ui()
         self.load_settings()
-        self._setup_updater_thread()
 
-    def _setup_updater_thread(self):
-        self.update_thread = QThread()
-        self.update_worker = UpdateChecker()
-        self.update_worker.moveToThread(self.update_thread)
-
-        self.start_download.connect(self.update_worker.download_updates)
-        self.start_language_download.connect(self.update_worker.download_language)
-
-        self.update_worker.checking_for_updates.connect(self._on_checking_updates)
-        self.update_worker.update_check_finished.connect(self._on_check_finished)
-        self.update_worker.download_progress.connect(self._on_download_progress)
-        self.update_worker.update_complete.connect(self._on_update_complete)
-
-        self.update_thread.finished.connect(self.update_worker.deleteLater)
-        self.update_thread.start()
-
-    def _on_check_button_clicked(self):
-        self.update_worker.run_check()
-
-    def _on_checking_updates(self):
-        self.update_status_label.setText("Checking for updates...")
-        self.check_update_button.setEnabled(False)
-
-    def _on_check_finished(self, files_to_download, message):
-        self.update_status_label.setText(message)
-        self.check_update_button.setEnabled(True)
-
-        if files_to_download:
-            msg = QMessageBox()
-            msg.setWindowTitle("Update Available")
-            msg.setText(f"{message}\n\nDo you want to download and apply the updates?\n(Your progress will not be affected.)")
-            msg.setIcon(QMessageBox.Icon.Information)
-            msg.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-            msg.setDefaultButton(QMessageBox.StandardButton.Yes)
-            
-            if msg.exec() == QMessageBox.StandardButton.Yes:
-                self.check_update_button.setEnabled(False)
-                self.start_download.emit(files_to_download)
-
-    def _on_download_progress(self, current, total, filename):
-        self.update_status_label.setText(f"Downloading {filename} ({current}/{total})...")
-
-    def _on_update_complete(self, success, message):
-        self.update_status_label.setText(message)
-        self.check_update_button.setEnabled(True)
+    def init_ui(self):
+        self.tabs = QTabWidget()
+        # Tabs are now compact
+        self.tabs.setStyleSheet("""
+            QTabWidget::pane { border: 1px solid #333; border-radius: 4px; background: transparent; }
+            QTabBar::tab { padding: 4px 10px; min-width: 50px; font-size: 13px; } 
+        """)
         
-        icon = QMessageBox.Icon.Information if success else QMessageBox.Icon.Warning
-        msg = QMessageBox()
-        msg.setWindowTitle("Update Complete" if success else "Update Error")
-        msg.setText(message)
-        msg.setIcon(icon)
-        msg.exec()
-
-    def cleanup(self):
-        if self.update_thread.isRunning():
-            self.update_thread.quit()
-            self.update_thread.wait()
-
-    def add_header(self, text):
-        lbl = QLabel(text)
-        lbl.setObjectName("Header") 
-        self.scroll_layout.addWidget(lbl)
-    
-    def add_labeled_widget(self, label_text, widget):
-        row = QHBoxLayout()
-        lbl = QLabel(label_text)
-        lbl.setStyleSheet("color: #E0E6ED;")
-        row.addWidget(lbl)
-        row.addWidget(widget)
-        self.scroll_layout.addLayout(row)
-
-    def add_hotkey_selector(self, label_text):
-        row = QHBoxLayout()
-        lbl = QLabel(label_text)
-        lbl.setStyleSheet("color: #E0E6ED;")
-        row.addWidget(lbl)
-        btn = HotkeyButton()
-        row.addWidget(btn)
-        self.scroll_layout.addLayout(row)
-        return btn
-
-    def add_checkbox(self, text):
-        chk = QCheckBox(text)
-        self.scroll_layout.addWidget(chk)
-        return chk
-
-    def add_slider(self, label, min_v, max_v, default, suffix, float_scale=False):
-        row = QHBoxLayout()
-        lbl = QLabel(label)
-        lbl.setStyleSheet("color: #E0E6ED;")
-        row.addWidget(lbl)
+        self.content_layout.addWidget(self.tabs)
         
-        val_lbl = QLabel(f"{default}{suffix}")
-        val_lbl.setFixedWidth(50)
-        val_lbl.setStyleSheet("color: #E0E6ED;")
-        val_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.tabs.addTab(self.setup_general_tab(), "General")
+        self.tabs.addTab(self.setup_item_overlay_tab(), "Item Overlay")
+        self.tabs.addTab(self.setup_quest_overlay_tab(), "Quest Overlay")
+
+        self.footer_layout.addStretch()
         
-        # Use NoScrollSlider to prevent accidental scrolling changes
-        slider = NoScrollSlider(Qt.Orientation.Horizontal)
-        slider.setRange(min_v if not float_scale else int(min_v*10), max_v if not float_scale else int(max_v*10))
-        slider.setValue(default if not float_scale else int(default*10))
+        self.btn_revert = QPushButton("Revert Changes")
+        self.btn_revert.setObjectName("action_button_red")
+        self.btn_revert.setFixedSize(130, 32)
+        self.btn_revert.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_revert.clicked.connect(self.load_settings)
+        
+        self.btn_save = QPushButton("Save Settings")
+        self.btn_save.setObjectName("action_button_green")
+        self.btn_save.setFixedSize(130, 32)
+        self.btn_save.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_save.clicked.connect(self.save_settings)
+
+        self.footer_layout.addWidget(self.btn_revert)
+        self.footer_layout.addWidget(self.btn_save)
+
+    # --- TABS ---
+    def setup_general_tab(self):
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(10, 10, 10, 10) # Reduced padding
+        layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        layout.setSpacing(10) # Reduced spacing between cards
+        
+        # --- CARD 1: PREFERENCES ---
+        layout.addWidget(QLabel("Preferences", objectName="Header"))
+        card_pref = SettingsCard()
+        l_pref = QVBoxLayout(card_pref)
+        l_pref.setContentsMargins(10, 10, 10, 10) # Tight padding
+        
+        row_lang = QHBoxLayout()
+        lbl_lang = QLabel("Game Language:")
+        lbl_lang.setStyleSheet("font-size: 13px; font-weight: bold; color: #E0E6ED; border: none; background: transparent;")
+        self.lang_combo = QComboBox()
+        self.lang_combo.addItems(sorted(list(Constants.LANGUAGES.keys())))
+        self.lang_combo.setFixedWidth(200)
+        
+        row_lang.addWidget(lbl_lang)
+        row_lang.addStretch()
+        row_lang.addWidget(self.lang_combo)
+        l_pref.addLayout(row_lang)
+        layout.addWidget(card_pref)
+
+        # --- CARD 2: HOTKEYS ---
+        layout.addWidget(QLabel("Global Hotkeys", objectName="Header"))
+        card_hk = SettingsCard()
+        l_hk = QVBoxLayout(card_hk)
+        l_hk.setContentsMargins(10, 10, 10, 10)
+        l_hk.setSpacing(8)
+
+        def add_hk(txt, btn):
+            r = QHBoxLayout()
+            r.addWidget(QLabel(txt, styleSheet="font-size: 13px; color: #E0E6ED; border:none; background:transparent;"))
+            btn.setFixedWidth(200)
+            btn.setFixedHeight(28) # Smaller buttons
+            r.addStretch()
+            r.addWidget(btn)
+            l_hk.addLayout(r)
+        
+        self.hotkey_btn = HotkeyButton()
+        add_hk("Item Info Hotkey:", self.hotkey_btn)
+        
+        div_hk = QFrame(); div_hk.setFrameShape(QFrame.Shape.HLine); div_hk.setStyleSheet("background: #333;")
+        l_hk.addWidget(div_hk)
+        
+        self.quest_hotkey_btn = HotkeyButton()
+        add_hk("Quest Log Hotkey:", self.quest_hotkey_btn)
+        
+        hk_hint = QLabel("Note: Changes to hotkeys require an application restart.")
+        hk_hint.setStyleSheet("color: #E5C07B; font-style: italic; font-size: 11px; border:none; background:transparent;")
+        l_hk.addWidget(hk_hint)
+        layout.addWidget(card_hk)
+
+        # --- CARD 3: UPDATES ---
+        layout.addWidget(QLabel("Updates", objectName="Header"))
+        card_upd = SettingsCard()
+        l_upd = QVBoxLayout(card_upd)
+        l_upd.setContentsMargins(10, 10, 10, 10)
+        l_upd.setSpacing(8)
+
+        # App Update
+        row_app = QHBoxLayout()
+        row_app.addWidget(QLabel("Application Version:", styleSheet="color: #ABB2BF; font-weight: bold; border: none; background: transparent; font-size: 13px;"))
+        row_app.addStretch()
+        app_check_btn = QPushButton("Check for App Updates")
+        app_check_btn.setFixedWidth(160)
+        app_check_btn.setFixedHeight(28)
+        app_check_btn.setStyleSheet("QPushButton { background-color: #3E4451; color: white; border: 1px solid #555; font-weight: bold; border-radius: 4px; font-size: 12px;} QPushButton:hover { background-color: #4B5363; border-color: #777; }")
+        app_check_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        app_check_btn.clicked.connect(self.request_app_update.emit)
+        row_app.addWidget(app_check_btn)
+        l_upd.addLayout(row_app)
+
+        div_upd = QFrame(); div_upd.setFrameShape(QFrame.Shape.HLine); div_upd.setStyleSheet("background: #333;")
+        l_upd.addWidget(div_upd)
+
+        # Data Update
+        row_data = QHBoxLayout()
+        data_lbl_layout = QVBoxLayout()
+        data_lbl_layout.setSpacing(0)
+        data_lbl_layout.addWidget(QLabel("Data & Language:", styleSheet="color: #ABB2BF; font-weight: bold; border: none; background: transparent; font-size: 13px;"))
+        self.update_status_label = QLabel("Ready")
+        self.update_status_label.setStyleSheet("font-size: 11px; color: #E0E6ED; border: none; background: transparent; font-style: italic;")
+        data_lbl_layout.addWidget(self.update_status_label)
+        
+        row_data.addLayout(data_lbl_layout)
+        row_data.addStretch()
+        
+        data_check_btn = QPushButton("Check for Data Updates")
+        data_check_btn.setFixedWidth(160)
+        data_check_btn.setFixedHeight(28)
+        data_check_btn.setObjectName("action_button_green")
+        data_check_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        data_check_btn.setStyleSheet("QPushButton { font-size: 12px; }")
+        data_check_btn.clicked.connect(self.request_data_update.emit)
+        row_data.addWidget(data_check_btn)
+        
+        l_upd.addLayout(row_data)
+        layout.addWidget(card_upd)
+
+        return page
+
+    def setup_item_overlay_tab(self):
+        page = QWidget(); layout = QVBoxLayout(page); layout.setContentsMargins(10, 10, 10, 10); layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        splitter = QHBoxLayout(); splitter.setSpacing(15)
+        
+        left_col = QVBoxLayout()
+        
+        # Appearance Card
+        card_app = SettingsCard(); l_app = QVBoxLayout(card_app); l_app.setContentsMargins(10, 10, 10, 10)
+        self.item_font_size = self._create_slider(l_app, "Font Size:", 8, 24, 12, "pt", lambda: self.update_preview())
+        self.item_duration = self._create_slider(l_app, "Duration:", 1, 10, 3, "s", float_scale=True)
+        left_col.addWidget(card_app)
+
+        # Modifiers Card
+        card_mod = SettingsCard(); l_mod = QVBoxLayout(card_mod); l_mod.setContentsMargins(10, 10, 10, 10)
+        self.chk_future_hideout = ModernToggle("Show All Future Hideout Requirements")
+        self.chk_future_project = ModernToggle("Show All Future Project Requirements")
+        l_mod.addWidget(self.chk_future_hideout); l_mod.addWidget(self.chk_future_project)
+        left_col.addWidget(card_mod)
+
+        lbl_list = QLabel("Order & Visibility (Drag to reorder)"); lbl_list.setStyleSheet("font-weight: bold; margin-top: 5px; color: #9DA5B4; border:none; background:transparent;")
+        left_col.addWidget(lbl_list)
+        
+        self.overlay_order_list = QListWidget(); self.overlay_order_list.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
+        self.overlay_order_list.setDefaultDropAction(Qt.DropAction.MoveAction)
+        
+        # --- FIXED STYLESHEET FOR VISIBILITY ---
+        self.overlay_order_list.setStyleSheet("""
+            QListWidget { 
+                background-color: #232834; 
+                border: 1px solid #333; 
+                border-radius: 4px; 
+                outline: 0;
+            }
+            QListWidget::item { 
+                padding: 4px; 
+                background-color: #1A1F2B; 
+                border-bottom: 1px solid #333; 
+                margin: 2px; 
+                color: #E0E6ED;
+            }
+            QListWidget::item:selected { 
+                background-color: #3E4451; 
+                border: 1px solid #4476ED; 
+            }
+            QListWidget::indicator {
+                width: 20px; 
+                height: 20px; 
+                border: 1px solid #555; 
+                background: #15181E; 
+                border-radius: 3px;
+                margin-right: 10px;
+            }
+            QListWidget::indicator:hover { 
+                border: 1px solid #4CAF50; 
+            }
+            QListWidget::indicator:checked { 
+                background-color: #4CAF50; 
+                border: 1px solid #4CAF50;
+                image: url(data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjQiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBvbHlsaW5lIHBvaW50cz0iMjAgNiA5IDE3IDQgMTIiPjwvcG9seWxpbmU+PC9zdmc+);
+            }
+        """)
+        
+        self.overlay_order_list.setFixedHeight(315)
+        self.overlay_order_list.itemChanged.connect(self.update_preview); self.overlay_order_list.model().rowsMoved.connect(self.update_preview)
+        left_col.addWidget(self.overlay_order_list); splitter.addLayout(left_col, stretch=3)
+
+        right_col = QVBoxLayout(); right_col.setAlignment(Qt.AlignmentFlag.AlignTop)
+        right_col.addWidget(QLabel("Live Preview", alignment=Qt.AlignmentFlag.AlignCenter, styleSheet="border:none; background:transparent; font-weight:bold; color: #ABB2BF;"))
+        self.preview_frame = QFrame(); self.preview_frame.setFixedWidth(300)
+        self.preview_frame.setStyleSheet("QFrame { background-color: qlineargradient(spread:pad, x1:0, y1:0, x2:0, y2:1, stop:0 #2B303B, stop:1 #1A1F26); border: 1px solid #3E4451; border-top: 3px solid #C678DD; border-radius: 5px; } QLabel { color: #E0E6ED; background: transparent; border: none; }")
+        shadow = QGraphicsDropShadowEffect(); shadow.setBlurRadius(15); shadow.setColor(QColor(0,0,0,150)); shadow.setYOffset(4); self.preview_frame.setGraphicsEffect(shadow)
+        self.p_layout = QVBoxLayout(self.preview_frame); self.p_layout.setContentsMargins(12, 10, 12, 10); self.p_layout.setSpacing(4)
+        
+        self.p_title = QLabel("Example Item Name"); self.p_title.setWordWrap(True); self.p_title.setStyleSheet("font-weight: bold; color: #C678DD;")
+        self.p_layout.addWidget(self.p_title)
+        
+        self._build_preview_content()
+        self.p_layout.addStretch(); right_col.addWidget(self.preview_frame)
+        splitter.addLayout(right_col, stretch=2); layout.addLayout(splitter)
+        return page
+
+    def setup_quest_overlay_tab(self):
+        page = QWidget(); layout = QVBoxLayout(page); layout.setContentsMargins(10, 10, 10, 10); layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        card = SettingsCard(); l = QVBoxLayout(card); l.setSpacing(10); l.setContentsMargins(10, 10, 10, 10)
+        self.quest_font_size = self._create_slider(l, "Font Size:", 8, 24, 12, "pt")
+        self.quest_width = self._create_slider(l, "Width:", 200, 600, 350, "px")
+        self.quest_opacity = self._create_slider(l, "Opacity:", 30, 100, 95, "%")
+        self.quest_duration = self._create_slider(l, "Duration:", 1, 20, 5, "s", float_scale=True)
+        layout.addWidget(card); return page
+
+    # --- HELPERS ---
+    def _create_slider(self, layout, label, min_v, max_v, default, suffix, callback=None, float_scale=False):
+        row = QHBoxLayout(); row.addWidget(QLabel(label, styleSheet="color: #E0E6ED; font-size: 13px; min-width: 80px; border:none; background:transparent;"))
+        val_lbl = QLabel(f"{default}{suffix}"); val_lbl.setFixedWidth(50); val_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter); val_lbl.setStyleSheet("color: #4476ED; font-weight: bold; border:none; background:transparent;")
+        slider = QSlider(Qt.Orientation.Horizontal)
+        slider.setStyleSheet("QSlider::groove:horizontal { height: 4px; background: #3E4451; border-radius: 2px; } QSlider::handle:horizontal { background: #4476ED; width: 16px; margin: -6px 0; border-radius: 8px; }")
+        slider.setRange(min_v*10 if float_scale else min_v, max_v*10 if float_scale else max_v)
+        slider.setValue(int(default*10) if float_scale else default)
         
         def update_lbl(v):
-            display_val = v/10.0 if float_scale else v
-            val_lbl.setText(f"{display_val:.1f}{suffix}" if float_scale else f"{display_val}{suffix}")
-            
+            d = v/10.0 if float_scale else v; val_lbl.setText(f"{d:.1f}{suffix}" if float_scale else f"{d}{suffix}")
+            if callback: callback()
         slider.valueChanged.connect(update_lbl)
-        update_lbl(slider.value())
-        
-        row.addWidget(slider)
-        row.addWidget(val_lbl)
-        self.scroll_layout.addLayout(row)
+        row.addWidget(slider); row.addWidget(val_lbl); layout.addLayout(row)
         return slider
 
+    def _build_preview_content(self):
+        def add(key, html, sub=None, sub_html=None):
+            if key in self.SECTIONS: 
+                sep = QFrame(); sep.setFrameShape(QFrame.Shape.HLine)
+                # --- FIXED SEPARATOR STYLE ---
+                sep.setStyleSheet("background-color: rgba(255, 255, 255, 0.1); max-height: 1px; border: none;")
+                self.p_layout.addWidget(sep); self.preview_widgets[f"sep_{key}"] = sep
+            l = QLabel(html); l.setWordWrap(True); self.p_layout.addWidget(l); self.preview_widgets[key] = l
+            if sub: 
+                sl = QLabel(sub_html); sl.setStyleSheet("color:#ABB2BF; margin-left:10px;")
+                self.p_layout.addWidget(sl); self.preview_widgets[sub] = sl
+
+        add("price", "Price: <span style='color:#E5C07B'>14,500</span>")
+        add("storage", "Storage: <span style='color:#ABB2BF'>4</span>")
+        add("trader", "<span style='color:#98C379'>Barkley: 2x Gold Watch</span>")
+        add("notes", "<span style='color:#FFEB3B'>✎ Save for quest later</span>")
+        add("crafting", "<span style='color:#5C6370; font-weight:bold'>Crafting</span>", "crafting_detail", "■ Advanced Bench (45s)")
+        add("hideout", "<span style='color:#5C6370; font-weight:bold'>Hideout Upgrade:</span>", "hideout_detail", "■ Med Bay Lv.2: x3")
+        add("project", "<span style='color:#5C6370; font-weight:bold'>Project Request:</span>", "project_detail", "■ Radio Tower (Ph2): x1")
+        add("recycle", "<span style='color:#5C6370; font-weight:bold'>Recycles Into:</span>", "recycle_detail", "■ 1x Circuit Board")
+        add("salvage", "<span style='color:#5C6370; font-weight:bold'>Salvages Into:</span>", "salvage_detail", "■ 2x Metal Scrap")
+
+    def update_preview(self):
+        size = self.item_font_size.value()
+        self.p_title.setFont(QFont("Segoe UI", size + 3, QFont.Weight.Bold))
+        font_body = QFont("Segoe UI", size)
+        
+        for i in reversed(range(1, self.p_layout.count())):
+            item = self.p_layout.itemAt(i)
+            if item.widget(): item.widget().setParent(None)
+            else: self.p_layout.removeItem(item)
+
+        first = True
+        for i in range(self.overlay_order_list.count()):
+            item = self.overlay_order_list.item(i)
+            key = item.data(Qt.ItemDataRole.UserRole)
+            if item.checkState() == Qt.CheckState.Checked and key in self.preview_widgets:
+                w, sep = self.preview_widgets[key], self.preview_widgets.get(f"sep_{key}")
+                if sep and not first: self.p_layout.addWidget(sep); sep.show()
+                self.p_layout.addWidget(w); w.setFont(font_body); w.show()
+                sub = self.preview_widgets.get(f"{key}_detail")
+                if sub: self.p_layout.addWidget(sub); sub.setFont(font_body); sub.show()
+                first = False
+        self.p_layout.addStretch()
+        self.preview_frame.setFixedWidth(max(280, size * 22))
+
+    def save_state(self):
+        self.save_settings()
+
+    def reset_state(self):
+        pass 
+
     def load_settings(self):
-        self.config.read(Constants.CONFIG_FILE)
+        # Hotkeys
+        self.hotkey_btn.set_hotkey(self.cfg.get_str('Hotkeys', 'price_check', "ctrl+f"))
+        self.quest_hotkey_btn.set_hotkey(self.cfg.get_str('Hotkeys', 'quest_log', "ctrl+e"))
+        self.start_hotkey_price = self.hotkey_btn.current_key_string
+        self.start_hotkey_quest = self.quest_hotkey_btn.current_key_string
         
-        hk_price = self.config.get('Hotkeys', 'price_check', fallback="ctrl+f")
-        hk_quest = self.config.get('Hotkeys', 'quest_log', fallback="ctrl+e")
-        
-        self.hotkey_btn.set_hotkey(hk_price)
-        self.quest_hotkey_btn.set_hotkey(hk_quest)
-        
-        lang_code = self.config.get('General', 'language', fallback='eng')
-        found = False
+        # General
+        lang_code = self.cfg.get_str('General', 'language', 'eng')
         for name, (json_code, tess_code) in Constants.LANGUAGES.items():
             if tess_code == lang_code or json_code == lang_code:
-                self.lang_combo.setCurrentText(name)
-                found = True
-                break
-        if not found: self.lang_combo.setCurrentText("English")
-
-        saved_order_str = self.config.get('ItemOverlay', 'section_order', fallback="")
-        if saved_order_str:
-            saved_order = [x.strip() for x in saved_order_str.split(',') if x.strip() in self.SECTIONS]
-            for key in self.DEFAULT_ORDER:
-                if key not in saved_order: saved_order.append(key)
-        else:
-            saved_order = self.DEFAULT_ORDER
-
+                self.lang_combo.setCurrentText(name); break
+        
+        # Item Overlay
+        self.item_font_size.setValue(self.cfg.get_int('ItemOverlay', 'font_size', 12))
+        self.item_duration.setValue(int(self.cfg.get_float('ItemOverlay', 'duration_seconds', 3.0) * 10))
+        self.chk_future_hideout.setChecked(self.cfg.get_bool('ItemOverlay', 'show_all_future_reqs', False))
+        self.chk_future_project.setChecked(self.cfg.get_bool('ItemOverlay', 'show_all_future_project_reqs', False))
+        
+        # Order List
+        saved_order = [x.strip() for x in self.cfg.get_str('ItemOverlay', 'section_order', "").split(',') if x.strip() in self.SECTIONS]
+        for k in self.DEFAULT_ORDER: 
+            if k not in saved_order: saved_order.append(k)
+        
         self.overlay_order_list.clear()
         for key in saved_order:
-            display_name, config_key = self.SECTIONS[key]
-            item = QListWidgetItem(display_name)
+            item = QListWidgetItem(self.SECTIONS[key][0])
             item.setData(Qt.ItemDataRole.UserRole, key)
-            is_checked = self.config.getboolean('ItemOverlay', config_key, fallback=True)
-            item.setCheckState(Qt.CheckState.Checked if is_checked else Qt.CheckState.Unchecked)
+            item.setCheckState(Qt.CheckState.Checked if self.cfg.get_bool('ItemOverlay', self.SECTIONS[key][1], True) else Qt.CheckState.Unchecked)
             self.overlay_order_list.addItem(item)
-
-        self.chk_future_hideout.setChecked(self.config.getboolean('ItemOverlay', 'show_all_future_reqs', fallback=False))
-        self.chk_future_project.setChecked(self.config.getboolean('ItemOverlay', 'show_all_future_project_reqs', fallback=False))
+            
+        # Quest Overlay
+        self.quest_font_size.setValue(self.cfg.get_int('QuestOverlay', 'font_size', 12))
+        self.quest_width.setValue(self.cfg.get_int('QuestOverlay', 'width', 350))
+        self.quest_opacity.setValue(self.cfg.get_int('QuestOverlay', 'opacity', 95))
+        self.quest_duration.setValue(int(self.cfg.get_float('QuestOverlay', 'duration_seconds', 5.0) * 10))
         
-        if not self.config.has_section('QuestOverlay'): self.config.add_section('QuestOverlay')
-        self.quest_font_size.setValue(self.config.getint('QuestOverlay', 'font_size', fallback=12))
-        self.quest_width.setValue(self.config.getint('QuestOverlay', 'width', fallback=350))
-        self.quest_opacity.setValue(self.config.getint('QuestOverlay', 'opacity', fallback=95))
-        self.quest_duration.setValue(int(self.config.getfloat('QuestOverlay', 'duration_seconds', fallback=5.0) * 10))
-        self.item_font_size.setValue(self.config.getint('ItemOverlay', 'font_size', fallback=12))
-        self.item_duration.setValue(int(self.config.getfloat('ItemOverlay', 'duration_seconds', fallback=3.0) * 10))
+        self.update_preview()
 
     def save_settings(self):
-        if not self.config.has_section('Hotkeys'): self.config.add_section('Hotkeys')
+        self.cfg.set('Hotkeys', 'price_check', self.hotkey_btn.current_key_string)
+        self.cfg.set('Hotkeys', 'quest_log', self.quest_hotkey_btn.current_key_string)
         
-        new_price_hk = self.hotkey_btn.current_key_string
-        new_quest_hk = self.quest_hotkey_btn.current_key_string
-        
-        self.config.set('Hotkeys', 'price_check', new_price_hk)
-        self.config.set('Hotkeys', 'quest_log', new_quest_hk)
-        
-        if not self.config.has_section('General'): self.config.add_section('General')
         display_name = self.lang_combo.currentText()
         if display_name in Constants.LANGUAGES:
             lang_code = Constants.LANGUAGES[display_name][1]
-            self.config.set('General', 'language', lang_code)
-            
-            if lang_code != 'eng': 
-                 target = os.path.join(Constants.TESSDATA_DIR, f"{lang_code}.traineddata")
-                 if not os.path.exists(target):
-                     QMessageBox.information(self, "Downloading Language", f"Downloading language data for {display_name}...\nThis may take a few seconds.")
-                     self.start_language_download.emit(lang_code)
+            self.cfg.set('General', 'language', lang_code)
+            target = os.path.join(Constants.TESSDATA_DIR, f"{lang_code}.traineddata")
+            if lang_code != 'eng' and not os.path.exists(target):
+                 QMessageBox.information(self, "Download Required", f"Downloading language data for {display_name}...")
+                 self.request_lang_download.emit(lang_code)
 
-        if not self.config.has_section('ItemOverlay'): self.config.add_section('ItemOverlay')
-        self.config.set('ItemOverlay', 'font_size', str(self.item_font_size.value()))
-        self.config.set('ItemOverlay', 'duration_seconds', str(self.item_duration.value()/10.0))
+        self.cfg.set('ItemOverlay', 'font_size', self.item_font_size.value())
+        self.cfg.set('ItemOverlay', 'duration_seconds', self.item_duration.value()/10.0)
+        self.cfg.set('ItemOverlay', 'show_all_future_reqs', self.chk_future_hideout.isChecked())
+        self.cfg.set('ItemOverlay', 'show_all_future_project_reqs', self.chk_future_project.isChecked())
         
         new_order = []
         for i in range(self.overlay_order_list.count()):
             item = self.overlay_order_list.item(i)
             key = item.data(Qt.ItemDataRole.UserRole)
             new_order.append(key)
-            _, config_key = self.SECTIONS[key]
-            is_checked = (item.checkState() == Qt.CheckState.Checked)
-            self.config.set('ItemOverlay', config_key, str(is_checked))
-            
-        self.config.set('ItemOverlay', 'section_order', ",".join(new_order))
+            self.cfg.set('ItemOverlay', self.SECTIONS[key][1], item.checkState() == Qt.CheckState.Checked)
+        self.cfg.set('ItemOverlay', 'section_order', ",".join(new_order))
+        
+        self.cfg.set('QuestOverlay', 'font_size', self.quest_font_size.value())
+        self.cfg.set('QuestOverlay', 'width', self.quest_width.value())
+        self.cfg.set('QuestOverlay', 'opacity', self.quest_opacity.value())
+        self.cfg.set('QuestOverlay', 'duration_seconds', self.quest_duration.value()/10.0)
+        
+        self.cfg.save() 
 
-        self.config.set('ItemOverlay', 'show_all_future_reqs', str(self.chk_future_hideout.isChecked()))
-        self.config.set('ItemOverlay', 'show_all_future_project_reqs', str(self.chk_future_project.isChecked()))
+        if self.hotkey_btn.current_key_string != self.start_hotkey_price or self.quest_hotkey_btn.current_key_string != self.start_hotkey_quest:
+            QMessageBox.information(self, "Restart Required", "Hotkeys updated. Please restart the app.")
         
-        if not self.config.has_section('QuestOverlay'): self.config.add_section('QuestOverlay')
-        self.config.set('QuestOverlay', 'font_size', str(self.quest_font_size.value()))
-        self.config.set('QuestOverlay', 'width', str(self.quest_width.value()))
-        self.config.set('QuestOverlay', 'opacity', str(self.quest_opacity.value()))
-        self.config.set('QuestOverlay', 'duration_seconds', str(self.quest_duration.value()/10.0))
-        
-        with open(Constants.CONFIG_FILE, 'w') as f:
-            self.config.write(f)
-            
-        if new_price_hk != self.start_hotkey_price or new_quest_hk != self.start_hotkey_quest:
-            QMessageBox.information(self, "Restart Required", "You have modified keybindings.\nPlease restart the application for the new hotkeys to take effect.")
+        if self.on_save_callback: self.on_save_callback()
+        QMessageBox.information(self, "Saved", "Settings saved successfully.")
 
-        if self.on_save_callback:
-            self.on_save_callback()
-        
-        QMessageBox.information(self, "Settings Saved", "Settings have been saved successfully.")
+    def set_update_status(self, text):
+        self.update_status_label.setText(text)

@@ -9,17 +9,16 @@ GITHUB_API_URL = "https://api.github.com/repos/Joopz0r/arcraiders-data/git/trees
 # The base URL for downloading the raw file content
 GITHUB_RAW_URL = "https://raw.githubusercontent.com/Joopz0r/arcraiders-data/main/"
 
-# --- MODIFIED: This list now matches the structure of the GITHUB REPOSITORY ---
-# We will look for these paths at the root of the remote repository.
+# --- MODIFIED: Added maps.json to managed paths ---
 MANAGED_PATHS = [
     'items/',
     'hideout/',
     'quests/',
     'images/',
     'projects.json',
-    'trades.json'
+    'trades.json',
+    'maps.json'
 ]
-# --------------------------------------------------------------------------
 
 class UpdateChecker(QObject):
     """
@@ -88,11 +87,8 @@ class UpdateChecker(QObject):
                 file_content_response = requests.get(download_url, timeout=10)
                 file_content_response.raise_for_status()
 
-                # --- MODIFIED: Construct the correct LOCAL save path ---
-                # This prepends our "data/" directory to the path received from GitHub.
-                # e.g., GitHub's "items/gun.json" becomes local "data/items/gun.json"
+                # Construct local save path
                 local_path = os.path.join(Constants.DATA_DIR, path)
-                # --------------------------------------------------------
 
                 dir_name = os.path.dirname(local_path)
                 if not os.path.exists(dir_name):
