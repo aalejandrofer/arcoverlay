@@ -46,7 +46,7 @@ V1.3.0
 - Fixed color match settings handling
 - Resolved JSON parsing errors in item data files
 - Fixed quest movement display updates
-
+- Fixed config defaults not saving on first run
 
 V1.2.1
 Added 'Check for Updates' button in About tab.

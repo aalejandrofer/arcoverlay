@@ -537,7 +537,9 @@ class SettingsWindow(BasePage):
         self.chk_future_hideout.setChecked(self.cfg.get_bool('ItemOverlay', 'show_all_future_reqs', False))
         self.chk_future_project.setChecked(self.cfg.get_bool('ItemOverlay', 'show_all_future_project_reqs', False))
         
-        # Order List
+        # Order List - Check for fresh config
+        is_fresh_config = not self.cfg.parser.has_section('ItemOverlay')
+
         saved_order = [x.strip() for x in self.cfg.get_str('ItemOverlay', 'section_order', "").split(',') if x.strip() in self.SECTIONS]
         for k in self.DEFAULT_ORDER: 
             if k not in saved_order: saved_order.append(k)
@@ -548,6 +550,10 @@ class SettingsWindow(BasePage):
             item.setData(Qt.ItemDataRole.UserRole, key)
             item.setCheckState(Qt.CheckState.Checked if self.cfg.get_bool('ItemOverlay', self.SECTIONS[key][1], True) else Qt.CheckState.Unchecked)
             self.overlay_order_list.addItem(item)
+
+        # Force save defaults on first run so Overlay can read them
+        if is_fresh_config:
+            self._force_save_defaults(saved_order)
             
         # Quest Overlay
         self.quest_font_size.setValue(self.cfg.get_int('QuestOverlay', 'font_size', 12))
@@ -556,6 +562,14 @@ class SettingsWindow(BasePage):
         self.quest_duration.setValue(int(self.cfg.get_float('QuestOverlay', 'duration_seconds', 5.0) * 10))
         
         self.update_preview()
+
+    def _force_save_defaults(self, order_list):
+        """Silently saves the defaults to config file for first-time run."""
+        self.cfg.set('ItemOverlay', 'section_order', ",".join(order_list))
+        for key in order_list:
+             # Default to True for all standard sections on first run
+             self.cfg.set('ItemOverlay', self.SECTIONS[key][1], True)
+        self.cfg.save()
 
     def save_settings(self):
         self.cfg.set('Hotkeys', 'price_check', self.hotkey_btn.current_key_string)
