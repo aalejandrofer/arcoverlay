@@ -19,6 +19,7 @@ MANAGED_PATHS = [
     'trades.json',
     'maps.json'
 ]
+# --------------------------------------------------------------------------
 
 class UpdateChecker(QObject):
     """

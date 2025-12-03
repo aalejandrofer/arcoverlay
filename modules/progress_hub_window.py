@@ -27,11 +27,59 @@ class AboutTab(QWidget):
             if subtext: lbl.setText(f"{subtext} <a href='{url}' style='color: #61AFEF; text-decoration: none;'>{text}</a>")
             lbl.setOpenExternalLinks(True); lbl.setFont(QFont("Segoe UI", 14)); lbl.setAlignment(Qt.AlignmentFlag.AlignCenter); return lbl
         layout.addWidget(make_link("www.arc-companion.xyz", "https://www.arc-companion.xyz"))
+        layout.addWidget(make_link("Open Source", "https://github.com/Joopz0r/ArcCompanion-public"))
         layout.addWidget(make_link("RaidTheory/arcraiders-data", "https://github.com/RaidTheory/arcraiders-data", "Special thanks to:"))
         layout.addSpacing(20)
         patch_lbl = QLabel("Patch Notes"); patch_lbl.setStyleSheet("font-size: 18px; font-weight: bold; color: #E0E6ED; margin-bottom: 5px;"); layout.addWidget(patch_lbl)
         self.patch_notes = QTextEdit(); self.patch_notes.setReadOnly(True); self.patch_notes.setStyleSheet("QTextEdit { background-color: #232834; color: #E0E6ED; border: 1px solid #3E4451; border-radius: 4px; padding: 10px; font-size: 13px; font-family: 'Segoe UI'; }")
-        self.patch_notes.setHtml(f"<b>v{app_version} - Full Localization Fix</b><br><br><b>Updates:</b><br>• Refactored codebase for better performance.<br>• Settings logic decoupled from UI.<br>"); layout.addWidget(self.patch_notes)
+        self.patch_notes.setHtml(f"""
+        <b>{app_version} - Major Enhancements Update</b><br><br>
+
+        <b>Item Overlay Enhancements</b><br>
+        - Added drag-and-drop reordering for overlay sections in settings<br>
+        - Overlay sections now display in custom user-defined order<br>
+        - Settings checkboxes now display green ticks when enabled<br>
+        - Improved live preview of overlay appearance in settings<br>
+        - Item overlay can now display how much you have in storage<br><br>
+
+        <b>Quest Overlay Enhancements</b><br>
+        - Added Map names for quests<br><br>
+
+        <b>Item Database</b><br>
+        - Added quick filter buttons for Blueprints and Storage<br>
+        - Blueprint progress now shown as "Collected/Total" counter<br>
+        - Enhanced blueprint collection tracking with visual indicators<br>
+        - Added storage tracking with visual indicators<br>
+        - Added dedicated inspector panel for item details<br>
+        - Improved item search with multi-language support<br>
+        - Added filtering by: Tracked, Storage, Quest Requirements, Hideout Requirements, Project Requirements<br>
+        - Added item requirement details showing which quests/hideout/projects need each item<br><br>
+
+        <b>Language & Localization</b><br>
+        - Fixed overlay text to display in selected language for all item information<br>
+        - Improved language file handling and download process<br>
+        - Enhanced multi-language search capabilities<br><br>
+
+        <b>OCR & Performance</b><br>
+        - Optimized tooltip OCR for faster and more reliable captures<br>
+        - Pre-loading Tesseract worker for improved performance<br>
+        - Cropped tooltip processing to header section only<br>
+        - Fixed screenshot path handling on Windows<br><br>
+
+        <b>UI/UX Improvements</b><br>
+        - Reorganized settings into tabbed interface (General, Item Overlay, Quest Overlay)<br>
+        - Improved visual styling for better contrast and readability<br>
+        - Added separator lines between overlay sections<br>
+        - Enhanced item cards with rarity-based color coding<br><br>
+
+        <b>Bug Fixes</b><br>
+        - Fixed "future hideout" and "projects" settings not affecting overlay display<br>
+        - Fixed QThread and QLabel runtime errors<br>
+        - Fixed color match settings handling<br>
+        - Resolved JSON parsing errors in item data files<br>
+        - Fixed quest movement display updates
+        """)
+        layout.addWidget(self.patch_notes)
 
 class ProgressHubWindow(QWidget):
     # This signal bubbles up auto-saves from children tabs to the main app

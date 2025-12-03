@@ -19,6 +19,11 @@ from modules.update_checker import UpdateChecker
 from modules.app_updater import AppUpdateChecker
 from modules.config_manager import ConfigManager
 
+import scipy.ndimage
+import scipy.special
+import scipy.spatial.transform
+import rapidfuzz 
+
 APP_VERSION = "1.3.0"
 APP_UPDATE_URL = "https://arc-companion.xyz/check_update.php" 
 

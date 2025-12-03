@@ -255,11 +255,29 @@ class ItemDatabaseWindow(BasePage):
         self.search_bar = QLineEdit(); self.search_bar.setPlaceholderText("Search items..."); self.search_bar.setStyleSheet("QLineEdit { background-color: #1A1F2B; border: 1px solid #333; border-radius: 4px; padding: 8px; color: white; font-size: 14px; }")
         self.search_bar.textChanged.connect(self.search_timer.start); filter_layout.addWidget(self.search_bar)
         
-        self.reset_btn = QPushButton("✖"); self.reset_btn.setFixedSize(32, 32); self.reset_btn.setCursor(Qt.CursorShape.PointingHandCursor); self.reset_btn.setToolTip("Reset Search and Filters")
-        self.reset_btn.setStyleSheet("QPushButton { background-color: #3E4451; color: #FFF; border: 1px solid #5C6370; border-radius: 4px; font-weight: bold; font-size: 16px; } QPushButton:hover { background-color: #4B5363; }")
+        # Button: Red X
+        self.reset_btn = QPushButton("✖")
+        self.reset_btn.setFixedSize(32, 32)
+        self.reset_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.reset_btn.setToolTip("Reset Search and Filters")
+        
+        # Red Style matching other "Negative/Clear" actions in the app
+        self.reset_btn.setStyleSheet("""
+            QPushButton { 
+                background-color: rgba(211, 47, 47, 0.2); 
+                color: #ef5350; 
+                border: 1px solid #ef5350; 
+                border-radius: 4px; 
+                font-weight: bold; 
+                font-size: 14px; 
+            } 
+            QPushButton:hover { 
+                background-color: rgba(211, 47, 47, 0.4); 
+            }
+        """)
         self.reset_btn.clicked.connect(self.reset_filters); filter_layout.addWidget(self.reset_btn)
 
-        self.view_filter = self._create_combo("All Items", ["Tracked Only", "Storage", "Needed For Quests", "Needed For Hideout", "Needed For Projects"])
+        self.view_filter = self._create_combo("All Items", ["Tracked Only", "Stash", "Needed For Quests", "Needed For Hideout", "Needed For Projects"])
         self.type_filter = self._create_combo("All Types", self.all_types); self.rarity_filter = self._create_combo("All Rarities", self.all_rarities)
         for w in [self.view_filter, self.type_filter, self.rarity_filter]: filter_layout.addWidget(w)
         
@@ -270,7 +288,7 @@ class ItemDatabaseWindow(BasePage):
         self.bp_filter_btn.setStyleSheet("QPushButton { background-color: #1E3A5F; color: #FFF; border: 1px solid #4476ED; border-radius: 4px; padding: 6px 12px; font-weight: bold; min-width: 140px; } QPushButton:hover { background-color: #2b4c75; }")
         self.bp_filter_btn.clicked.connect(self._filter_to_blueprints)
         
-        self.storage_filter_btn = QPushButton("Storage"); self.storage_filter_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.storage_filter_btn = QPushButton("Stash"); self.storage_filter_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.storage_filter_btn.setStyleSheet("QPushButton { background-color: #2E5C32; color: #FFF; border: 1px solid #4CAF50; border-radius: 4px; padding: 6px 12px; font-weight: bold; min-width: 100px; } QPushButton:hover { background-color: #3d7a42; }")
         self.storage_filter_btn.clicked.connect(self._filter_to_storage)
         bp_layout.addWidget(self.bp_filter_btn); bp_layout.addWidget(self.storage_filter_btn); bp_layout.addStretch()
@@ -326,7 +344,7 @@ class ItemDatabaseWindow(BasePage):
         c.currentTextChanged.connect(self.filter_items); return c
 
     def _filter_to_blueprints(self): self.view_filter.setCurrentText("All Items"); self.type_filter.setCurrentText("Blueprint"); self.filter_items()
-    def _filter_to_storage(self): self.view_filter.setCurrentText("Storage"); self.filter_items()
+    def _filter_to_storage(self): self.view_filter.setCurrentText("Stash"); self.filter_items()
 
     def reset_filters(self):
         self.search_bar.blockSignals(True); self.view_filter.blockSignals(True); self.type_filter.blockSignals(True); self.rarity_filter.blockSignals(True)
@@ -355,7 +373,7 @@ class ItemDatabaseWindow(BasePage):
                         if val and search in val.lower(): found = True; break
                 if not found: continue
             if view == "Tracked Only" and iid not in tracked: continue
-            if view == "Storage" and stash.get(iid, 0) <= 0: continue
+            if view == "Stash" and stash.get(iid, 0) <= 0: continue
             
             reqs = self.req_cache.get(iid, {'types': set()})['types']
             if view == "Needed For Quests" and 'quest' not in reqs: continue

@@ -9,7 +9,9 @@ from PyQt6.QtGui import (
 )
 import os
 
+# =============================================================================
 # HEADER COMPONENT (New)
+# =============================================================================
 class PageHeader(QFrame):
     def __init__(self, title_text, parent=None):
         super().__init__(parent)
@@ -41,7 +43,10 @@ class PageHeader(QFrame):
     def add_widget(self, widget):
         self.controls_layout.addWidget(widget)
 
+# =============================================================================
 # PROGRESS BARS
+# =============================================================================
+
 class TextProgressBar(QProgressBar):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -106,7 +111,10 @@ class StashProgressBar(QProgressBar):
         painter.setFont(font); painter.setPen(QColor("#FFFFFF"))
         painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, text); painter.end()
 
+# =============================================================================
 # INPUT CONTROLS
+# =============================================================================
+
 class InventoryControl(QWidget):
     value_changed = pyqtSignal()
 
@@ -255,7 +263,10 @@ class HotkeyButton(QPushButton):
         if self.isChecked(): self._cancel()
         super().focusOutEvent(event)
 
+# =============================================================================
 # DISPLAY CONTAINERS
+# =============================================================================
+
 class SettingsCard(QFrame):
     """Container matching the Hub style (Dark Blue-Grey)."""
     def __init__(self, parent=None):

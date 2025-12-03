@@ -2,11 +2,27 @@
 # ArcCompanion PyInstaller Specification File
 
 import os
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+
+tess_exe = os.path.join("Tesseract-OCR", "tesseract.exe")
+if not os.path.exists(tess_exe):
+    print(f"\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+    print(f"CRITICAL ERROR: 'tesseract.exe' is missing!")
+    print(f"Location looked for: {os.path.abspath(tess_exe)}")
+    print(f"Your Tesseract-OCR folder is likely empty or missing binaries.")
+    print(f"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n")
+    sys.exit(1) # Stop the build immediately
+# --------------------
+from PyInstaller.utils.hooks import collect_all
 
 block_cipher = None
 
-# Collect all hidden imports
+# --- 1. COLLECT BINARIES FOR MATH LIBRARIES ---
+# This is the vital part missing from your spec. 
+# Without this, the EXE has the code but not the engines to run Scipy/Rapidfuzz.
+scipy_bin, scipy_data, scipy_hidden = collect_all('scipy')
+rf_bin, rf_data, rf_hidden = collect_all('rapidfuzz')
+
+# --- 2. HIDDEN IMPORTS ---
 hidden_imports = [
     'PyQt6.QtCore',
     'PyQt6.QtGui',
@@ -15,18 +31,27 @@ hidden_imports = [
     'Pillow',
     'PIL',
     'pynput',
-    'pynput.keyboard',
-    'pynput.mouse',
-    'rapidfuzz',
+    'pynput.keyboard._win32', # Critical for Hotkeys
+    'pynput.mouse._win32',
     'pyperclip',
-    'pystray',
-    'scipy',
     'numpy',
+    'requests', 
+    # Critical Scipy/Image components
+    'scipy',
+    'scipy.ndimage',
+    'scipy.special',
+    'scipy.spatial.transform',
 ]
 
-# Collect all modules from the modules directory
+# Add the extra imports found by collect_all
+hidden_imports.extend(scipy_hidden)
+hidden_imports.extend(rf_hidden)
+
+# Project Modules
 hidden_imports.extend([
-    'modules.base_manager_window',
+    'modules.app_updater',
+    'modules.base_page', 
+    'modules.config_manager',
     'modules.constants',
     'modules.data_manager',
     'modules.hideout_manager_window',
@@ -36,38 +61,45 @@ hidden_imports.extend([
     'modules.progress_hub_window',
     'modules.project_manager_window',
     'modules.quest_manager_window',
+    'modules.scanner',
     'modules.settings_window',
     'modules.ui_components',
     'modules.update_checker',
 ])
 
-# Define data files to include
+# --- 3. DATA FILES ---
 datas = [
-    ('arccompanion.ico', '.'),  # Include icon in root
-    ('arccompanion.png', '.'),  # Include PNG logo
-    ('Tesseract-OCR', 'Tesseract-OCR'),  # Include entire Tesseract-OCR folder
-    ('modules', 'modules'),  # Include modules as package
+    ('arccompanion.ico', '.'),
+    ('arccompanion.png', '.'),
+    ('Tesseract-OCR', 'Tesseract-OCR'), 
+    ('modules', 'modules'),  # Keeping your preference to include this as data
 
-    # --- BUNDLED ASSETS (Inside EXE) ---
-    # These specific files get frozen inside the executable
+    # Bundled Assets
     ('data/images/coins.svg',        'bundled_assets'),
     ('data/images/coins.png',        'bundled_assets'),
     ('data/images/support_banner.png', 'bundled_assets'),
 ]
 
-# NOTE: The rest of 'data' (items/quests/hideout) is intentionally excluded 
-# so it can be updated separately by the user/update checker.
+# Add the extra data files found by collect_all
+datas.extend(scipy_data)
+datas.extend(rf_data)
+
+# --- 4. BINARIES ---
+# This was empty in your file, which is why Scipy failed.
+binaries = []
+binaries.extend(scipy_bin)
+binaries.extend(rf_bin)
 
 a = Analysis(
     ['arc_companion.py'],
     pathex=[],
-    binaries=[],
+    binaries=binaries, # Pass the collected binaries here
     datas=datas,
     hiddenimports=hidden_imports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=['matplotlib', 'tkinter'],
+    excludes=['matplotlib', 'tkinter'], 
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,
@@ -90,7 +122,7 @@ exe = EXE(
     upx=True,
     upx_exclude=[],
     runtime_tmpdir=None,
-    console=False,
+    console=False, # TEMPORARILY set to True to see errors if it still fails
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,

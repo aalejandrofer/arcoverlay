@@ -2,7 +2,7 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
     QSlider, QPushButton, QComboBox, QStackedWidget, QFrame, 
     QGraphicsDropShadowEffect, QMessageBox, QTabWidget, QListWidget, QListWidgetItem,
-    QAbstractItemView
+    QAbstractItemView, QSpinBox, QAbstractSpinBox
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QFont
@@ -20,7 +20,7 @@ class SettingsWindow(BasePage):
     
     SECTIONS = {
         'price': ('Price', 'show_price'),
-        'storage': ('Storage Count', 'show_storage_info'),
+        'storage': ('Stash Count', 'show_storage_info'),
         'trader': ('Trader Info', 'show_trader_info'),
         'notes': ('User Notes', 'show_notes'),
         'crafting': ('Crafting Info', 'show_crafting_info'),
@@ -30,6 +30,7 @@ class SettingsWindow(BasePage):
         'salvage': ('Salvages Into', 'show_salvages_into')
     }
     DEFAULT_ORDER = ['price', 'storage', 'trader', 'notes', 'crafting', 'hideout', 'project', 'recycle', 'salvage']
+    DEFAULT_OCR_COLOR = (249, 238, 223)
 
     def __init__(self, config_manager, on_save_callback=None):
         super().__init__("Application Settings") 
@@ -56,6 +57,7 @@ class SettingsWindow(BasePage):
         self.tabs.addTab(self.setup_general_tab(), "General")
         self.tabs.addTab(self.setup_item_overlay_tab(), "Item Overlay")
         self.tabs.addTab(self.setup_quest_overlay_tab(), "Quest Overlay")
+        self.tabs.addTab(self.setup_updates_tab(), "Updates")
 
         self.footer_layout.addStretch()
         
@@ -78,15 +80,15 @@ class SettingsWindow(BasePage):
     def setup_general_tab(self):
         page = QWidget()
         layout = QVBoxLayout(page)
-        layout.setContentsMargins(10, 10, 10, 10) # Reduced padding
+        layout.setContentsMargins(10, 10, 10, 10) 
         layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-        layout.setSpacing(10) # Reduced spacing between cards
+        layout.setSpacing(10) 
         
         # --- CARD 1: PREFERENCES ---
         layout.addWidget(QLabel("Preferences", objectName="Header"))
         card_pref = SettingsCard()
         l_pref = QVBoxLayout(card_pref)
-        l_pref.setContentsMargins(10, 10, 10, 10) # Tight padding
+        l_pref.setContentsMargins(10, 10, 10, 10) 
         
         row_lang = QHBoxLayout()
         lbl_lang = QLabel("Game Language:")
@@ -112,7 +114,7 @@ class SettingsWindow(BasePage):
             r = QHBoxLayout()
             r.addWidget(QLabel(txt, styleSheet="font-size: 13px; color: #E0E6ED; border:none; background:transparent;"))
             btn.setFixedWidth(200)
-            btn.setFixedHeight(28) # Smaller buttons
+            btn.setFixedHeight(28) 
             r.addStretch()
             r.addWidget(btn)
             l_hk.addLayout(r)
@@ -131,20 +133,123 @@ class SettingsWindow(BasePage):
         l_hk.addWidget(hk_hint)
         layout.addWidget(card_hk)
 
-        # --- CARD 3: UPDATES ---
-        layout.addWidget(QLabel("Updates", objectName="Header"))
+        # --- CARD 3: SCANNING ---
+        layout.addWidget(QLabel("Scanning", objectName="Header"))
+        card_scan = SettingsCard()
+        l_scan = QVBoxLayout(card_scan)
+        l_scan.setContentsMargins(15, 15, 15, 15)
+        l_scan.setSpacing(10)
+        
+        l_scan.addWidget(QLabel("Tooltip Target Color (RGB Detection):", styleSheet="color: #E0E6ED; font-weight: bold; font-size: 13px; border:none; background:transparent;"))
+        
+        # Controls Row
+        row_color = QHBoxLayout()
+        row_color.setSpacing(15)
+        
+        # Create Spinboxes
+        self.spin_r = self._create_color_spinbox()
+        self.spin_g = self._create_color_spinbox()
+        self.spin_b = self._create_color_spinbox()
+
+        # Connect updates
+        self.spin_r.valueChanged.connect(self._update_color_preview)
+        self.spin_g.valueChanged.connect(self._update_color_preview)
+        self.spin_b.valueChanged.connect(self._update_color_preview)
+
+        # Helper to create the [ - ] [ 123 ] [ + ] layout
+        def add_rgb_control(layout, label, color_hex, spinbox):
+            container = QWidget()
+            h_layout = QHBoxLayout(container)
+            h_layout.setContentsMargins(0, 0, 0, 0)
+            h_layout.setSpacing(2)
+
+            lbl = QLabel(label)
+            lbl.setStyleSheet(f"color: {color_hex}; font-weight:bold; border:none; background:transparent; margin-right: 5px;")
+            
+            # FIXED: Added 'padding: 0px' and increased width to 24 so symbols are visible
+            btn_style = """
+                QPushButton { 
+                    background-color: #3E4451; 
+                    color: white; 
+                    border: 1px solid #555; 
+                    border-radius: 3px; 
+                    font-weight: bold; 
+                    padding: 0px; 
+                } 
+                QPushButton:hover { 
+                    background-color: #4B5363; 
+                    border-color: #777; 
+                }
+            """
+            
+            btn_minus = QPushButton("-")
+            btn_minus.setFixedSize(24, 26) 
+            btn_minus.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn_minus.setStyleSheet(btn_style)
+            btn_minus.clicked.connect(spinbox.stepDown)
+
+            btn_plus = QPushButton("+")
+            btn_plus.setFixedSize(24, 26) 
+            btn_plus.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn_plus.setStyleSheet(btn_style)
+            btn_plus.clicked.connect(spinbox.stepUp)
+
+            h_layout.addWidget(lbl)
+            h_layout.addWidget(btn_minus)
+            h_layout.addWidget(spinbox)
+            h_layout.addWidget(btn_plus)
+            
+            layout.addWidget(container)
+
+        # Add R, G, B controls
+        add_rgb_control(row_color, "R:", "#FF6B6B", self.spin_r)
+        add_rgb_control(row_color, "G:", "#51CF66", self.spin_g)
+        add_rgb_control(row_color, "B:", "#339AF0", self.spin_b)
+        
+        # Preview
+        row_color.addSpacing(10)
+        row_color.addWidget(QLabel("Preview:", styleSheet="color: #AAA; font-size: 12px; border:none; background:transparent;"))
+        self.color_preview = QFrame()
+        self.color_preview.setFixedSize(32, 24)
+        self.color_preview.setStyleSheet("border: 1px solid #555; border-radius: 4px; background-color: rgb(249, 238, 223);")
+        row_color.addWidget(self.color_preview)
+
+        # Default Button
+        row_color.addStretch()
+        btn_reset_color = QPushButton("Default")
+        btn_reset_color.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_reset_color.setFixedSize(60, 26)
+        btn_reset_color.setStyleSheet("font-size: 11px;")
+        btn_reset_color.clicked.connect(self._reset_ocr_color)
+        row_color.addWidget(btn_reset_color)
+
+        l_scan.addLayout(row_color)
+        
+        help_txt = QLabel("Adjust these values if the scanner fails to detect the tooltip background color.\nThe default (249, 238, 223) works for standard brightness settings.")
+        help_txt.setWordWrap(True)
+        help_txt.setStyleSheet("color: #888; font-style: italic; font-size: 11px; margin-top: 5px; border:none; background:transparent;")
+        l_scan.addWidget(help_txt)
+        
+        layout.addWidget(card_scan)
+
+        return page
+
+    def setup_updates_tab(self):
+        page = QWidget(); layout = QVBoxLayout(page); layout.setContentsMargins(10, 10, 10, 10); layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        
+        layout.addWidget(QLabel("Update Management", objectName="Header"))
         card_upd = SettingsCard()
         l_upd = QVBoxLayout(card_upd)
-        l_upd.setContentsMargins(10, 10, 10, 10)
-        l_upd.setSpacing(8)
+        l_upd.setContentsMargins(15, 15, 15, 15)
+        l_upd.setSpacing(12)
 
         # App Update
         row_app = QHBoxLayout()
-        row_app.addWidget(QLabel("Application Version:", styleSheet="color: #ABB2BF; font-weight: bold; border: none; background: transparent; font-size: 13px;"))
+        row_app.addWidget(QLabel("Application Version:", styleSheet="color: #ABB2BF; font-weight: bold; border: none; background: transparent; font-size: 14px;"))
         row_app.addStretch()
         app_check_btn = QPushButton("Check for App Updates")
-        app_check_btn.setFixedWidth(160)
-        app_check_btn.setFixedHeight(28)
+        app_check_btn.setFixedWidth(180)
+        app_check_btn.setFixedHeight(30)
         app_check_btn.setStyleSheet("QPushButton { background-color: #3E4451; color: white; border: 1px solid #555; font-weight: bold; border-radius: 4px; font-size: 12px;} QPushButton:hover { background-color: #4B5363; border-color: #777; }")
         app_check_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         app_check_btn.clicked.connect(self.request_app_update.emit)
@@ -157,18 +262,18 @@ class SettingsWindow(BasePage):
         # Data Update
         row_data = QHBoxLayout()
         data_lbl_layout = QVBoxLayout()
-        data_lbl_layout.setSpacing(0)
-        data_lbl_layout.addWidget(QLabel("Data & Language:", styleSheet="color: #ABB2BF; font-weight: bold; border: none; background: transparent; font-size: 13px;"))
+        data_lbl_layout.setSpacing(2)
+        data_lbl_layout.addWidget(QLabel("Data & Language Files:", styleSheet="color: #ABB2BF; font-weight: bold; border: none; background: transparent; font-size: 14px;"))
         self.update_status_label = QLabel("Ready")
-        self.update_status_label.setStyleSheet("font-size: 11px; color: #E0E6ED; border: none; background: transparent; font-style: italic;")
+        self.update_status_label.setStyleSheet("font-size: 12px; color: #E0E6ED; border: none; background: transparent; font-style: italic;")
         data_lbl_layout.addWidget(self.update_status_label)
         
         row_data.addLayout(data_lbl_layout)
         row_data.addStretch()
         
         data_check_btn = QPushButton("Check for Data Updates")
-        data_check_btn.setFixedWidth(160)
-        data_check_btn.setFixedHeight(28)
+        data_check_btn.setFixedWidth(180)
+        data_check_btn.setFixedHeight(30)
         data_check_btn.setObjectName("action_button_green")
         data_check_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         data_check_btn.setStyleSheet("QPushButton { font-size: 12px; }")
@@ -177,7 +282,7 @@ class SettingsWindow(BasePage):
         
         l_upd.addLayout(row_data)
         layout.addWidget(card_upd)
-
+        
         return page
 
     def setup_item_overlay_tab(self):
@@ -286,6 +391,34 @@ class SettingsWindow(BasePage):
         row.addWidget(slider); row.addWidget(val_lbl); layout.addLayout(row)
         return slider
 
+    def _create_color_spinbox(self):
+        spin = QSpinBox()
+        spin.setRange(0, 255)
+        spin.setFixedWidth(45) 
+        spin.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        # CORRECTED LINE:
+        spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+        
+        spin.setStyleSheet("""
+            QSpinBox { background-color: #232834; color: #E0E6ED; border: 1px solid #333; padding: 4px; border-radius: 4px; font-weight: bold; }
+            QSpinBox:focus { border: 1px solid #4476ED; }
+        """)
+        return spin
+
+    def _update_color_preview(self):
+        r = self.spin_r.value()
+        g = self.spin_g.value()
+        b = self.spin_b.value()
+        self.color_preview.setStyleSheet(f"border: 1px solid #555; border-radius: 4px; background-color: rgb({r}, {g}, {b});")
+
+    def _reset_ocr_color(self):
+        r, g, b = self.DEFAULT_OCR_COLOR
+        self.spin_r.setValue(r)
+        self.spin_g.setValue(g)
+        self.spin_b.setValue(b)
+        self._update_color_preview()
+
     def _build_preview_content(self):
         def add(key, html, sub=None, sub_html=None):
             if key in self.SECTIONS: 
@@ -299,7 +432,7 @@ class SettingsWindow(BasePage):
                 self.p_layout.addWidget(sl); self.preview_widgets[sub] = sl
 
         add("price", "Price: <span style='color:#E5C07B'>14,500</span>")
-        add("storage", "Storage: <span style='color:#ABB2BF'>4</span>")
+        add("storage", "Stash: <span style='color:#ABB2BF'>4</span>")
         add("trader", "<span style='color:#98C379'>Barkley: 2x Gold Watch</span>")
         add("notes", "<span style='color:#FFEB3B'>✎ Save for quest later</span>")
         add("crafting", "<span style='color:#5C6370; font-weight:bold'>Crafting</span>", "crafting_detail", "■ Advanced Bench (45s)")
@@ -310,27 +443,59 @@ class SettingsWindow(BasePage):
 
     def update_preview(self):
         size = self.item_font_size.value()
-        self.p_title.setFont(QFont("Segoe UI", size + 3, QFont.Weight.Bold))
-        font_body = QFont("Segoe UI", size)
         
+        # 1. Force styles via Stylesheet to override global theme
+        # Title Style
+        self.p_title.setStyleSheet(f"font-size: {size + 3}pt; font-weight: bold; color: #C678DD; border: none; background: transparent;")
+        
+        # Main Text Style
+        style_main = f"font-size: {size}pt; color: #E0E6ED; border: none; background: transparent;"
+        
+        # Sub Text Style (Details like "Med Bay Lv.2") - includes indentation
+        style_sub = f"font-size: {size}pt; color: #ABB2BF; margin-left: 10px; border: none; background: transparent;"
+
+        # 2. Clear current preview layout (visually)
         for i in reversed(range(1, self.p_layout.count())):
             item = self.p_layout.itemAt(i)
-            if item.widget(): item.widget().setParent(None)
-            else: self.p_layout.removeItem(item)
+            if item.widget(): 
+                item.widget().setParent(None) # Detach from layout to hide
+            else: 
+                self.p_layout.removeItem(item)
 
+        # 3. Rebuild layout based on enabled items
         first = True
         for i in range(self.overlay_order_list.count()):
             item = self.overlay_order_list.item(i)
             key = item.data(Qt.ItemDataRole.UserRole)
+            
+            # Check if enabled and exists in our widget cache
             if item.checkState() == Qt.CheckState.Checked and key in self.preview_widgets:
-                w, sep = self.preview_widgets[key], self.preview_widgets.get(f"sep_{key}")
-                if sep and not first: self.p_layout.addWidget(sep); sep.show()
-                self.p_layout.addWidget(w); w.setFont(font_body); w.show()
+                w = self.preview_widgets[key]
+                sep = self.preview_widgets.get(f"sep_{key}")
+                
+                # Add Separator (if not first item)
+                if sep and not first: 
+                    self.p_layout.addWidget(sep)
+                    sep.show()
+                
+                # Add Main Label
+                self.p_layout.addWidget(w)
+                w.setStyleSheet(style_main) # Apply font size
+                w.show()
+                
+                # Add Detail Label (if exists)
                 sub = self.preview_widgets.get(f"{key}_detail")
-                if sub: self.p_layout.addWidget(sub); sub.setFont(font_body); sub.show()
+                if sub: 
+                    self.p_layout.addWidget(sub)
+                    sub.setStyleSheet(style_sub) # Apply font size + margin
+                    sub.show()
+                
                 first = False
+                
         self.p_layout.addStretch()
-        self.preview_frame.setFixedWidth(max(280, size * 22))
+        
+        # 4. Adjust box width to fit larger text
+        self.preview_frame.setFixedWidth(max(280, int(size * 22)))
 
     def save_state(self):
         self.save_settings()
@@ -351,6 +516,21 @@ class SettingsWindow(BasePage):
             if tess_code == lang_code or json_code == lang_code:
                 self.lang_combo.setCurrentText(name); break
         
+        # OCR Color
+        color_str = self.cfg.get_str('OCR', 'target_color', "249, 238, 223")
+        try:
+            parts = [int(x.strip()) for x in color_str.split(',')]
+            if len(parts) == 3:
+                self.spin_r.setValue(parts[0])
+                self.spin_g.setValue(parts[1])
+                self.spin_b.setValue(parts[2])
+            else:
+                self._reset_ocr_color()
+        except ValueError:
+            self._reset_ocr_color()
+
+        self._update_color_preview()
+
         # Item Overlay
         self.item_font_size.setValue(self.cfg.get_int('ItemOverlay', 'font_size', 12))
         self.item_duration.setValue(int(self.cfg.get_float('ItemOverlay', 'duration_seconds', 3.0) * 10))
@@ -389,6 +569,10 @@ class SettingsWindow(BasePage):
             if lang_code != 'eng' and not os.path.exists(target):
                  QMessageBox.information(self, "Download Required", f"Downloading language data for {display_name}...")
                  self.request_lang_download.emit(lang_code)
+
+        # Save OCR Color
+        color_str = f"{self.spin_r.value()}, {self.spin_g.value()}, {self.spin_b.value()}"
+        self.cfg.set('OCR', 'target_color', color_str)
 
         self.cfg.set('ItemOverlay', 'font_size', self.item_font_size.value())
         self.cfg.set('ItemOverlay', 'duration_seconds', self.item_duration.value()/10.0)

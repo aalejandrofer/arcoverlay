@@ -207,9 +207,9 @@ class ItemOverlayUI:
                 if final_path and os.path.exists(final_path):
                     img_size = font_size + 4
                     safe_path = final_path.replace("\\", "/")
-                    label_text = f"Storage: <img src='{safe_path}' width='{img_size}' height='{img_size}' style='vertical-align: middle;'> <span style='color:#ABB2BF'>{count_str}</span>"
+                    label_text = f"Stash: <img src='{safe_path}' width='{img_size}' height='{img_size}' style='vertical-align: middle;'> <span style='color:#ABB2BF'>{count_str}</span>"
                 else:
-                    label_text = f"Storage: <span style='color:#ABB2BF'>{count_str}</span>"
+                    label_text = f"Stash: <span style='color:#ABB2BF'>{count_str}</span>"
                 
                 overlay.add_label(label_text, font_size, True, color=None)
                 has_content = True
