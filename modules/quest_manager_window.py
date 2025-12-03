@@ -1,4 +1,4 @@
-from PyQt6.QtWidgets import (QLabel, QPushButton, QFrame, QCheckBox, QMessageBox, QVBoxLayout, QHBoxLayout)
+from PyQt6.QtWidgets import (QLabel, QPushButton, QFrame, QCheckBox, QMessageBox, QVBoxLayout, QHBoxLayout, QLineEdit, QComboBox)
 from PyQt6.QtCore import Qt
 import json
 from .constants import Constants
@@ -17,6 +17,7 @@ class QuestManagerWindow(BasePage):
         
         self.quest_widgets = {} 
         self.all_quests_data = self.data_manager.get_filtered_quests(lang_code=self.lang_code) 
+        self.quest_data_map = {q.get('id'): q for q in self.all_quests_data}
         
         all_quest_ids = [q.get('id') for q in self.all_quests_data]
         self.quest_order = self.user_progress.get('quest_order', all_quest_ids)
@@ -24,11 +25,25 @@ class QuestManagerWindow(BasePage):
             if q_id not in self.quest_order: self.quest_order.append(q_id)
         
         # Header Controls
+        # Search
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("Search Quests...")
+        self.search_input.setFixedWidth(200)
+        self.search_input.textChanged.connect(self.rebuild_and_refresh_ui)
+        self.header.add_widget(self.search_input)
+
+        # Map Filter
+        self.map_filter = QComboBox()
+        self.map_filter.addItems(["ALL", "Dam Battlegrounds", "Buried City", "Spaceport", "Blue Gate", "Stella Montis"])
+        self.map_filter.currentIndexChanged.connect(self.rebuild_and_refresh_ui)
+        self.header.add_widget(self.map_filter)
+
         self.chk_show_completed = QCheckBox("Show Completed")
         self.chk_show_completed.stateChanged.connect(self.rebuild_and_refresh_ui)
         self.header.add_widget(self.chk_show_completed)
 
         self.build_all_widgets()
+        self.content_layout.addStretch()
         self.rebuild_and_refresh_ui()
 
     def build_all_widgets(self):
@@ -105,7 +120,19 @@ class QuestManagerWindow(BasePage):
             
         sorted_quest_ids = sorted(self.quest_widgets.keys(), key=sort_key)
         show_completed = self.chk_show_completed.isChecked()
-        visible_tracked_ids = [qid for qid in sorted_quest_ids if self.user_progress['quests'].get(qid, {}).get('is_tracked', False) and (not self.user_progress['quests'].get(qid, {}).get('quest_completed', False) or show_completed)]
+        
+        search_text = self.search_input.text().lower()
+        selected_map = self.map_filter.currentText()
+        
+        map_filter_map = {
+            "Dam Battlegrounds": ["dam_battlegrounds"],
+            "Buried City": ["buried_city"],
+            "Spaceport": ["the_spaceport"],
+            "Blue Gate": ["the_blue_gate"],
+            "Stella Montis": ["stella_montis_upper", "stella_montis_lower", "stella_montis"]
+        }
+        
+        visible_tracked_ids = []
         
         for i, q_id in enumerate(sorted_quest_ids):
             widgets = self.quest_widgets[q_id]
@@ -113,14 +140,28 @@ class QuestManagerWindow(BasePage):
             is_complete = prog.get('quest_completed', False)
             is_tracked = prog.get('is_tracked', False)
             
+            # Filter Check
+            quest_data = self.quest_data_map.get(q_id)
+            quest_name = quest_data.get('name', '').lower() if quest_data else ''
+            quest_maps = quest_data.get('map', []) if quest_data else []
+            if isinstance(quest_maps, str): quest_maps = [quest_maps]
+            
+            matches_search = search_text in quest_name
+            matches_map = True
+            if selected_map != "ALL":
+                target_maps = map_filter_map.get(selected_map, [])
+                matches_map = any(m in target_maps for m in quest_maps)
+            
+            should_show = (not is_complete or show_completed) and matches_search and matches_map
+            
             self.content_layout.insertWidget(i, widgets['frame'])
-            widgets['frame'].setVisible(not is_complete or show_completed)
+            widgets['frame'].setVisible(should_show)
+            
+            if should_show and is_tracked:
+                visible_tracked_ids.append(q_id)
+                
             widgets['btn_up'].setVisible(is_tracked)
             widgets['btn_down'].setVisible(is_tracked)
-            
-            if is_tracked and visible_tracked_ids:
-                widgets['btn_up'].setEnabled(not (q_id == visible_tracked_ids[0]))
-                widgets['btn_down'].setEnabled(not (q_id == visible_tracked_ids[-1]))
                 
             done_btn = widgets['done_btn']
             if is_complete:
@@ -138,6 +179,11 @@ class QuestManagerWindow(BasePage):
                 is_obj_complete = obj_widget['text'] in completed_objs
                 if obj_widget['checkbox'].isChecked() != is_obj_complete: obj_widget['checkbox'].setChecked(is_obj_complete)
                 obj_widget['label'].setStyleSheet("color: #5C6370; text-decoration: line-through;" if is_obj_complete else "color: #E0E6ED;")
+
+        for q_id in visible_tracked_ids:
+            widgets = self.quest_widgets[q_id]
+            widgets['btn_up'].setEnabled(not (q_id == visible_tracked_ids[0]))
+            widgets['btn_down'].setEnabled(not (q_id == visible_tracked_ids[-1]))
 
     def move_quest(self, quest_id, direction):
         tracked_quests = [q for q in self.quest_order if self.user_progress['quests'].get(q, {}).get('is_tracked', False)]

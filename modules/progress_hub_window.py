@@ -97,11 +97,53 @@ class ProgressHubWindow(QWidget):
         self.setStyleSheet(Constants.DARK_THEME_QSS)
 
         main_layout = QVBoxLayout(self)
-        banner_layout = QHBoxLayout(); banner_layout.setSpacing(15); banner_layout.setContentsMargins(5, 5, 5, 5)
+        # Banner Area
+        self.banner_container = QWidget()
+        banner_layout = QHBoxLayout(self.banner_container)
+        banner_layout.setSpacing(15)
+        banner_layout.setContentsMargins(5, 5, 5, 5)
+        
         self.support_banner = ClickableBanner(Constants.BANNER_IMAGE_PATH, "https://ko-fi.com/joopz0r", "☕ Support the Dev", bg_color="#333")
         self.discord_banner = ClickableBanner(Constants.DISCORD_IMAGE_PATH, "https://discord.gg/RzjPhXCXfH", "Join Discord", bg_color="#5865F2")
-        banner_layout.addWidget(self.support_banner); banner_layout.addWidget(self.discord_banner)
-        main_layout.addLayout(banner_layout)
+        
+        banner_layout.addWidget(self.support_banner)
+        banner_layout.addWidget(self.discord_banner)
+        main_layout.addWidget(self.banner_container)
+
+        # Banner Toggle Button
+        self.toggle_banner_btn = QPushButton("▲")
+        self.toggle_banner_btn.setText("▼") 
+        
+        self.toggle_banner_btn.setFixedSize(100, 12) # Slimmer height, wider width
+        self.toggle_banner_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.toggle_banner_btn.setToolTip("Hide Banner")
+        self.toggle_banner_btn.setStyleSheet("""
+            QPushButton {
+                background-color: transparent;
+                color: #5C6370;
+                border: none;
+                border-top: 1px solid #3E4451;
+                border-bottom-left-radius: 4px;
+                border-bottom-right-radius: 4px;
+                font-size: 10px;
+                padding: 0px;
+                margin: 0px;
+            }
+            QPushButton:hover {
+                background-color: #2C323C;
+                color: #E5C07B;
+            }
+        """)
+        self.toggle_banner_btn.clicked.connect(self.toggle_banner)
+        
+        # Center the toggle button
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+        btn_layout.addWidget(self.toggle_banner_btn)
+        btn_layout.addStretch()
+        btn_layout.setContentsMargins(0, 0, 0, 0)
+        btn_layout.setSpacing(0) # Remove spacing
+        main_layout.addLayout(btn_layout)
 
         self.tabs = QTabWidget()
         main_layout.addWidget(self.tabs)
@@ -157,6 +199,16 @@ class ProgressHubWindow(QWidget):
         for tab in [self.hideout_tab, self.quest_tab, self.project_tab, self.item_db_tab]:
             if hasattr(tab, 'save_state'): tab.save_state()
         super().closeEvent(event)
+
+    def toggle_banner(self):
+        if self.banner_container.isVisible():
+            self.banner_container.hide()
+            self.toggle_banner_btn.setText("▲") # Pointing up to show/expand? Or just swapped from before.
+            self.toggle_banner_btn.setToolTip("Show Banner")
+        else:
+            self.banner_container.show()
+            self.toggle_banner_btn.setText("▼")
+            self.toggle_banner_btn.setToolTip("Hide Banner")
 
     def cleanup(self):
         if hasattr(self, 'item_db_tab'):

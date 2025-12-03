@@ -104,7 +104,7 @@ class ItemGridCard(QFrame):
         else: bg = "#131519"; bg_hover = "#232834"; base_border = "#2A2E39"
         if self.is_selected: border = "2px solid #FFD700"; bg_style = bg_hover; hover_border = "#FFD700"
         else: border = f"1px solid {base_border}"; bg_style = bg; hover_border = self.rarity_color
-        self.setStyleSheet(f"QFrame {{ background: {bg_style}; border: {border}; border-bottom: 3px solid {self.rarity_color}; border-radius: 6px; }} QFrame:hover {{ background: {bg_hover}; border-color: {hover_border}; }}")
+        self.setStyleSheet(f"QFrame {{ background: {bg_style}; border: {border}; border-top: 3px solid {self.rarity_color}; border-radius: 6px; }} QFrame:hover {{ background: {bg_hover}; border-color: {hover_border}; }}")
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton: self.clicked.emit(self.item)
 
@@ -253,11 +253,11 @@ class ItemDatabaseWindow(BasePage):
     def init_ui(self):
         filter_layout = QHBoxLayout()
         self.search_bar = QLineEdit(); self.search_bar.setPlaceholderText("Search items..."); self.search_bar.setStyleSheet("QLineEdit { background-color: #1A1F2B; border: 1px solid #333; border-radius: 4px; padding: 8px; color: white; font-size: 14px; }")
-        self.search_bar.textChanged.connect(self.search_timer.start); filter_layout.addWidget(self.search_bar)
+        self.search_bar.textChanged.connect(self.search_timer.start); filter_layout.addWidget(self.search_bar, 1)
         
         # Button: Red X
         self.reset_btn = QPushButton("✖")
-        self.reset_btn.setFixedSize(32, 32)
+        self.reset_btn.setFixedSize(40, 32)
         self.reset_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.reset_btn.setToolTip("Reset Search and Filters")
         
@@ -277,7 +277,7 @@ class ItemDatabaseWindow(BasePage):
         """)
         self.reset_btn.clicked.connect(self.reset_filters); filter_layout.addWidget(self.reset_btn)
 
-        self.view_filter = self._create_combo("All Items", ["Tracked Only", "Stash", "Needed For Quests", "Needed For Hideout", "Needed For Projects"])
+        self.view_filter = self._create_combo("All Items", ["Tracked Only", "Stash", "Quests", "Hideout", "Projects"])
         self.type_filter = self._create_combo("All Types", self.all_types); self.rarity_filter = self._create_combo("All Rarities", self.all_rarities)
         for w in [self.view_filter, self.type_filter, self.rarity_filter]: filter_layout.addWidget(w)
         
@@ -340,7 +340,7 @@ class ItemDatabaseWindow(BasePage):
 
     def _create_combo(self, default, items):
         c = QComboBox(); c.addItem(default); c.addItems(items)
-        c.setStyleSheet("QComboBox { background-color: #1A1F2B; border: 1px solid #333; border-radius: 4px; padding: 5px 10px; color: #ddd; min-width: 120px; }")
+        c.setStyleSheet("QComboBox { background-color: #1A1F2B; border: 1px solid #333; border-radius: 4px; padding: 5px; color: #ddd; min-width: 80px; font-size: 12px; }")
         c.currentTextChanged.connect(self.filter_items); return c
 
     def _filter_to_blueprints(self): self.view_filter.setCurrentText("All Items"); self.type_filter.setCurrentText("Blueprint"); self.filter_items()
@@ -376,9 +376,9 @@ class ItemDatabaseWindow(BasePage):
             if view == "Stash" and stash.get(iid, 0) <= 0: continue
             
             reqs = self.req_cache.get(iid, {'types': set()})['types']
-            if view == "Needed For Quests" and 'quest' not in reqs: continue
-            if view == "Needed For Hideout" and 'hideout' not in reqs: continue
-            if view == "Needed For Projects" and 'project' not in reqs: continue
+            if view == "Quests" and 'quest' not in reqs: continue
+            if view == "Hideout" and 'hideout' not in reqs: continue
+            if view == "Projects" and 'project' not in reqs: continue
             if f_type != "All Types" and item.get('type') != f_type: continue
             if f_rarity != "All Rarities" and item.get('rarity') != f_rarity: continue
             self.filtered_items.append(item)
