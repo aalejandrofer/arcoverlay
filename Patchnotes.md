@@ -5,6 +5,8 @@ V1.3.0
 - Settings checkboxes now display green ticks when enabled
 - Improved live preview of overlay appearance in settings
 - Item overlay can now display how much you have in storage
+- Added toggle for ultra-wide monitors
+- Added color picker for OCR color
 
 **Quest Overlay Enhancements**
 - Added Map names for quests
@@ -31,6 +33,8 @@ V1.3.0
 - Pre-loading Tesseract worker for improved performance
 - Cropped tooltip processing to header section only
 - Fixed screenshot path handling on Windows
+- added support for widescreen monitors
+- added more debug options and settings for OCR
 
 **UI/UX Improvements**
 - Reorganized settings into tabbed interface (General, Item Overlay, Quest Overlay)
