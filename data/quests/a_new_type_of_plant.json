@@ -21,6 +21,9 @@
     "sr": "Nova vrsta biljke",
     "hr": "Nova vrsta biljke"
   },
+  "map": [
+    "dam_battlegrounds"
+  ],
   "trader": "Lance",
   "description": {
     "en": "Some scouts have been bringing back reports of these weird plants spreading into the area. Now, this makes your old pal Lance think it may have some interesting uses.",
