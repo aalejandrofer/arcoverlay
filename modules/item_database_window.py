@@ -80,13 +80,13 @@ class ItemGridCard(QFrame):
     def __init__(self, item, localized_name, image_loader, stash_count=0, stack_size=1, is_collected=False, is_selected=False):
         super().__init__()
         self.item = item; self.is_selected = is_selected
-        self.setFixedSize(130, 150); self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setFixedSize(100, 130); self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.rarity = item.get('rarity', 'Common'); self.rarity_color = Constants.RARITY_COLORS.get(self.rarity, "#777")
         self.is_bp = (item.get('type') == "Blueprint") or ("Blueprint" in item.get('name', ''))
         self._update_style()
         layout = QVBoxLayout(self); layout.setContentsMargins(5, 5, 5, 5); layout.setSpacing(4)
-        img_lbl = QLabel(); img_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter); img_lbl.setFixedSize(50, 50); img_lbl.setStyleSheet("border: none; background: transparent;")
-        image_loader.load_image(item, img_lbl, size=50)
+        img_lbl = QLabel(); img_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter); img_lbl.setFixedSize(40, 40); img_lbl.setStyleSheet("border: none; background: transparent;")
+        image_loader.load_image(item, img_lbl, size=40)
         layout.addWidget(img_lbl, alignment=Qt.AlignmentFlag.AlignCenter)
         name_lbl = QLabel(localized_name); name_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter); name_lbl.setWordWrap(True)
         name_lbl.setStyleSheet("color: #E0E0E0; font-size: 11px; font-weight: bold; border: none; background: transparent;")
@@ -251,29 +251,18 @@ class ItemDatabaseWindow(BasePage):
         self.filter_items(); self.update_blueprint_stats()
 
     def init_ui(self):
+        # 1. Top Filter Layout (Global Filters)
         filter_layout = QHBoxLayout()
         self.search_bar = QLineEdit(); self.search_bar.setPlaceholderText("Search items..."); self.search_bar.setStyleSheet("QLineEdit { background-color: #1A1F2B; border: 1px solid #333; border-radius: 4px; padding: 8px; color: white; font-size: 14px; }")
         self.search_bar.textChanged.connect(self.search_timer.start); filter_layout.addWidget(self.search_bar, 1)
         
-        # Button: Red X
         self.reset_btn = QPushButton("✖")
         self.reset_btn.setFixedSize(40, 32)
         self.reset_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.reset_btn.setToolTip("Reset Search and Filters")
-        
-        # Red Style matching other "Negative/Clear" actions in the app
         self.reset_btn.setStyleSheet("""
-            QPushButton { 
-                background-color: rgba(211, 47, 47, 0.2); 
-                color: #ef5350; 
-                border: 1px solid #ef5350; 
-                border-radius: 4px; 
-                font-weight: bold; 
-                font-size: 14px; 
-            } 
-            QPushButton:hover { 
-                background-color: rgba(211, 47, 47, 0.4); 
-            }
+            QPushButton { background-color: rgba(211, 47, 47, 0.2); color: #ef5350; border: 1px solid #ef5350; border-radius: 4px; font-weight: bold; font-size: 14px; } 
+            QPushButton:hover { background-color: rgba(211, 47, 47, 0.4); }
         """)
         self.reset_btn.clicked.connect(self.reset_filters); filter_layout.addWidget(self.reset_btn)
 
@@ -283,7 +272,8 @@ class ItemDatabaseWindow(BasePage):
         
         self.content_layout.addLayout(filter_layout)
         
-        bp_layout = QHBoxLayout(); bp_layout.setSpacing(10)
+        # 2. Blueprint / Stash Buttons Layout
+        bp_layout = QHBoxLayout(); bp_layout.setContentsMargins(5, 0, 0, 0);bp_layout.setSpacing(10)
         self.bp_filter_btn = QPushButton("Blueprints (0/0)"); self.bp_filter_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.bp_filter_btn.setStyleSheet("QPushButton { background-color: #1E3A5F; color: #FFF; border: 1px solid #4476ED; border-radius: 4px; padding: 6px 12px; font-weight: bold; min-width: 140px; } QPushButton:hover { background-color: #2b4c75; }")
         self.bp_filter_btn.clicked.connect(self._filter_to_blueprints)
@@ -292,20 +282,33 @@ class ItemDatabaseWindow(BasePage):
         self.storage_filter_btn.setStyleSheet("QPushButton { background-color: #2E5C32; color: #FFF; border: 1px solid #4CAF50; border-radius: 4px; padding: 6px 12px; font-weight: bold; min-width: 100px; } QPushButton:hover { background-color: #3d7a42; }")
         self.storage_filter_btn.clicked.connect(self._filter_to_storage)
         bp_layout.addWidget(self.bp_filter_btn); bp_layout.addWidget(self.storage_filter_btn); bp_layout.addStretch()
-        self.content_layout.addLayout(bp_layout)
-
+        
+        # 3. Main Splitter Setup
         splitter = QSplitter(Qt.Orientation.Horizontal); splitter.setStyleSheet("QSplitter::handle { background-color: #3E4451; width: 2px; }")
         
+        # --- List Area (Scroll) ---
         self.scroll_content = QWidget(); self.grid_layout = QGridLayout(self.scroll_content); self.grid_layout.setContentsMargins(5, 5, 5, 5); self.grid_layout.setSpacing(10); self.grid_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
-        
-        # --- FIXED: Use unique attribute name for inner scroll ---
         self.inner_scroll = QScrollArea(); self.inner_scroll.setWidgetResizable(True); self.inner_scroll.setWidget(self.scroll_content)
         self.inner_scroll.setStyleSheet("background: transparent; border: none;")
         
+        # --- Inspector Panel ---
         self.inspector = ItemInspectorPanel(self.data_manager, self.image_loader, self.lang_code)
         self.inspector.data_changed.connect(self.update_blueprint_stats); self.inspector.data_changed.connect(self.filter_items)
         
-        splitter.addWidget(self.inner_scroll); splitter.addWidget(self.inspector); splitter.setStretchFactor(0, 1); splitter.setStretchFactor(1, 0)
+        # --- NEW: Left Container (Groups Buttons + List) ---
+        left_container = QWidget()
+        left_layout = QVBoxLayout(left_container)
+        left_layout.setContentsMargins(0, 0, 5, 0) # Zero margins align it with top filters, 5px right margin for splitter handle
+        left_layout.setSpacing(10)
+        
+        left_layout.addLayout(bp_layout)      # Add Buttons here
+        left_layout.addWidget(self.inner_scroll) # Add List here
+
+        # Add to Splitter
+        splitter.addWidget(left_container)
+        splitter.addWidget(self.inspector)
+        splitter.setStretchFactor(0, 1); splitter.setStretchFactor(1, 0)
+        
         self.content_layout.addWidget(splitter)
 
     # ... [Helper methods identical to previous logic] ...
@@ -391,7 +394,7 @@ class ItemDatabaseWindow(BasePage):
     def update_display(self):
         while self.grid_layout.count(): item = self.grid_layout.takeAt(0); (item.widget().deleteLater() if item.widget() else None)
         # --- FIXED: Use inner_scroll ---
-        viewport_width = self.inner_scroll.viewport().width(); card_width = 140; max_cols = max(1, viewport_width // card_width)
+        viewport_width = self.inner_scroll.viewport().width(); card_width = 110; max_cols = max(1, viewport_width // card_width)
         row, col, count, limit = 0, 0, 0, self.current_display_limit
         stash = self.data_manager.user_progress.get('stash_inventory', {})
         for item in self.filtered_items:

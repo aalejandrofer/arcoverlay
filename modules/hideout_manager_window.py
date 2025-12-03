@@ -133,11 +133,11 @@ class HideoutManagerWindow(BasePage):
             self.station_widgets[station_id] = { 'frame': station_frame, 'btn_up': btn_up, 'btn_down': btn_down, 'lvl_lbl': lvl_lbl, 'toggle_btn': toggle_btn, 'level_containers': level_containers }
 
     def refresh_ui(self):
-        sorted_ids = sorted(self.station_widgets.keys(), key=lambda sid: (sid != 'scrappy', self.station_order.index(sid) if sid in self.station_order else 999))
+        sorted_ids = sorted(self.station_widgets.keys(), key=lambda sid: self.station_order.index(sid) if sid in self.station_order else 999)
         for i, sid in enumerate(sorted_ids):
             widgets = self.station_widgets[sid]
             self.content_layout.insertWidget(i, widgets['frame'])
-            widgets['btn_up'].setEnabled(i > 0 and sid != 'scrappy') 
+            widgets['btn_up'].setEnabled(i > 0)
             widgets['btn_down'].setEnabled(i < len(sorted_ids) - 1)
             if widgets['lvl_lbl']: widgets['lvl_lbl'].setText(str(self.station_current_levels[sid]))
             show_all = self.chk_show_all_reqs.isChecked()
@@ -149,7 +149,6 @@ class HideoutManagerWindow(BasePage):
     def move_station(self, station_id, direction):
         try: current_index = self.station_order.index(station_id)
         except ValueError: return
-        if station_id == 'scrappy': return 
         new_index = current_index + direction
         if 0 <= new_index < len(self.station_order):
             self.station_order.insert(new_index, self.station_order.pop(current_index))

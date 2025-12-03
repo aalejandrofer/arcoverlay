@@ -1,5 +1,6 @@
 from __future__ import annotations
 import argparse, os, sys, time, traceback
+import ctypes
 from dataclasses import dataclass
 from typing import Optional
 from datetime import datetime 
@@ -24,7 +25,7 @@ import scipy.special
 import scipy.spatial.transform
 import rapidfuzz 
 
-APP_VERSION = "1.3.0"
+APP_VERSION = "1.3.1"
 APP_UPDATE_URL = "https://arc-companion.xyz/check_update.php" 
 
 @dataclass
@@ -112,6 +113,7 @@ class ArcCompanionApp(QObject):
         self.tray = QSystemTrayIcon()
         self.tray.setIcon(QIcon(Constants.ICON_FILE if os.path.exists(Constants.ICON_FILE) else self.app.style().standardIcon(self.app.style().StandardPixmap.SP_ComputerIcon)))
         self._build_tray_menu()
+        self.tray.activated.connect(self.on_tray_icon_activated)
         self.tray.show()
 
         self.hotkey_thread = QThread()
@@ -121,10 +123,14 @@ class ArcCompanionApp(QObject):
         self.ensure_data_exists()
         self.check_for_app_updates(manual=False)
 
+    def on_tray_icon_activated(self, reason):
+        if reason == QSystemTrayIcon.ActivationReason.Trigger:
+            self.restore_app()
+
     def _build_tray_menu(self):
         menu = QMenu()
         settings_action = QAction("Settings", self); settings_action.triggered.connect(self.show_settings_tab)
-        hub_action = QAction("Progress Hub", self); hub_action.triggered.connect(self.progress_hub.show)
+        hub_action = QAction("Progress Hub", self); hub_action.triggered.connect(self.restore_app)
         exit_action = QAction("Exit", self); exit_action.triggered.connect(self.quit_app)
         menu.addAction(settings_action); menu.addAction(hub_action)
         if self.cmd_config.debug:
@@ -162,7 +168,13 @@ class ArcCompanionApp(QObject):
             if tess_c == self.ocr_lang_code:
                 self.json_lang_code = json_c; break
         
-        self.scanner.update_settings(self.target_color, self.ocr_lang_code, self.json_lang_code)
+        # Read Ultra-Wide Setting
+        full_screen = self.config_manager.get_bool('OCR', 'full_screen_scan', False)
+        # Read Debug Images Setting
+        save_debug = self.config_manager.get_bool('OCR', 'save_debug_images', False)
+
+        self.scanner.update_settings(self.target_color, self.ocr_lang_code, self.json_lang_code, full_screen_mode=full_screen, save_debug_images=save_debug)
+        
         if is_initial_load: print(f"[INFO] Settings Loaded. Lang: {self.ocr_lang_code}")
         else: print("Settings reloaded.")
 
@@ -170,7 +182,8 @@ class ArcCompanionApp(QObject):
         print("\n--- Triggering Item Check ---")
         try:
             for overlay in self.overlays: overlay.close()
-            self.overlays.clear(); time.sleep(0.1) 
+            self.overlays.clear()
+            # Removed time.sleep(0.1) for instant response
             scan_result = self.scanner.scan_screen(full_screen=from_tray)
             if scan_result: self.display_item_overlay(scan_result)
         except Exception as e: print(f"Error: {e}"); traceback.print_exc()
@@ -262,9 +275,7 @@ class ArcCompanionApp(QObject):
         self.progress_hub.progress_saved.connect(self.data_manager.reload_progress)
         self._build_tray_menu()
 
-    # --- FIXED CHECK UPDATE METHOD ---
     def check_for_app_updates(self, manual=False):
-        # Safely check if thread exists and is running
         if hasattr(self, 'app_update_thread') and self.app_update_thread:
             try:
                 if self.app_update_thread.isRunning():
@@ -272,7 +283,6 @@ class ArcCompanionApp(QObject):
                          QMessageBox.information(None, "Check in Progress", "An update check is already in progress.")
                      return
             except RuntimeError:
-                # The C++ object was deleted, so we can assume it's done.
                 self.app_update_thread = None
 
         self.app_update_thread = QThread()
@@ -294,6 +304,21 @@ class ArcCompanionApp(QObject):
     def quit_app(self): self.app.quit()
     def run(self): sys.exit(self.app.exec())
 
+    def restore_app(self):
+        """
+        Restores the window whether it is hidden OR minimized.
+        """
+        # 1. Ensure the window is visible (fixes the "Closed" case)
+        self.progress_hub.show()
+        
+        # 2. Un-minimize the window (fixes the "Minimized" case)
+        # This forces the window out of the taskbar and into 'Normal' state
+        self.progress_hub.setWindowState(Qt.WindowState.WindowActive)
+        
+        # 3. Bring to front and focus (fixes getting lost behind other windows)
+        self.progress_hub.activateWindow()
+        self.progress_hub.raise_()
+
 def main():
     def get_tesseract_path():
         if getattr(sys, 'frozen', False): return os.path.join(getattr(sys, '_MEIPASS', os.path.dirname(sys.executable)), 'Tesseract-OCR', 'tesseract.exe')
@@ -304,7 +329,15 @@ def main():
     config = Config.from_args(parser.parse_args())
     
     try:
+        # The string can be anything, but must be unique
+        myappid = f'joopzor.arccompanion.client.{APP_VERSION}'
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+    except ImportError:
+        pass
+
+    try:
         app_instance = QApplication(sys.argv)
+        if os.path.exists(Constants.ICON_FILE): app_instance.setWindowIcon(QIcon(Constants.ICON_FILE))
         shared_memory = QSharedMemory("ArcCompanion_Unique_Instance_Lock")
         if not shared_memory.create(1): QMessageBox.warning(None, "Already Running", "Arc Companion is already running."); sys.exit(0)
         app = ArcCompanionApp(config); app.run()

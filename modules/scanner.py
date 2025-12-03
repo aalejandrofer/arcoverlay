@@ -3,6 +3,7 @@ import os
 import pytesseract
 from PIL import ImageEnhance
 from typing import Optional, Dict, Any
+from datetime import datetime
 
 # RapidFuzz / Difflib check
 try:
@@ -26,26 +27,53 @@ class ItemScanner:
         self.target_color = (249, 238, 223)
         self.ocr_lang_code = 'eng'
         self.json_lang_code = 'en'
+        self.full_screen_mode = False 
+        self.save_debug_images = False # Default Off
         
         # Configure Tesseract Path if provided
         if self.cmd_config.tesseract_path:
             pytesseract.pytesseract.tesseract_cmd = self.cmd_config.tesseract_path
 
-    def update_settings(self, target_color, ocr_lang_code, json_lang_code):
+    def update_settings(self, target_color, ocr_lang_code, json_lang_code, full_screen_mode=False, save_debug_images=False):
         """Updates scanner settings when the user changes preferences."""
         self.target_color = target_color
         self.ocr_lang_code = ocr_lang_code
         self.json_lang_code = json_lang_code
+        self.full_screen_mode = full_screen_mode
+        self.save_debug_images = save_debug_images
 
     def scan_screen(self, full_screen: bool = False) -> Optional[Dict[str, Any]]:
         """
         Captures screen, processes image, runs OCR, finds item, and gathers all data.
         Returns a dictionary of item data or None if nothing found.
         """
-        # 1. Capture Image
-        img = ImageProcessor.capture_and_process(self.target_color, full_screen=full_screen)
+        # If user setting says full screen mode is ON, override the parameter
+        if self.full_screen_mode:
+            full_screen = True
+
+        # Prepare Debug Paths
+        debug_path = None
+        debug_prefix = None
+        if self.save_debug_images:
+            debug_path = os.path.join(os.path.expanduser("~"), "Pictures", "ArcCompanion_Debug")
+            os.makedirs(debug_path, exist_ok=True)
+            debug_prefix = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        # 1. Capture Image (Pass Debug Info)
+        img = ImageProcessor.capture_and_process(self.target_color, full_screen=full_screen, debug_path=debug_path, debug_prefix=debug_prefix)
         if img is None:
             return None
+        
+        # --- DEBUG: SAVE CROPPED COLOR IMAGE ---
+        # This saves the image AFTER cropping but BEFORE Grayscale conversion.
+        # This allows you to see if the Color Cropper worked correctly.
+        if self.save_debug_images and debug_path and debug_prefix:
+            try:
+                cropped_filename = f"{debug_prefix}_cropped.png"
+                img.save(os.path.join(debug_path, cropped_filename))
+            except Exception as e:
+                print(f"Failed to save debug cropped image: {e}")
+        # ---------------------------------------
         
         # 2. Debug: Check color region
         if self.cmd_config.debug:
@@ -53,9 +81,18 @@ class ItemScanner:
                 print("[DEBUG] Tooltip color region found! Cropping to tooltip.")
         
         # 3. Enhance Image for OCR
-        img = img.convert('L')
+        img = img.convert('L') # Convert to Grayscale
         enhancer = ImageEnhance.Contrast(img)
-        img = enhancer.enhance(2.0)
+        img = enhancer.enhance(2.0) # High Contrast
+        
+        # --- DEBUG: SAVE PROCESSED OCR IMAGE ---
+        if self.save_debug_images and debug_path and debug_prefix:
+            try:
+                processed_filename = f"{debug_prefix}_processed.png"
+                img.save(os.path.join(debug_path, processed_filename))
+            except Exception as e:
+                print(f"Failed to save debug processed image: {e}")
+        # ---------------------------------------
         
         # 4. Setup Language / Tesseract Config
         custom_lang_file = os.path.join(Constants.TESSDATA_DIR, f"{self.ocr_lang_code}.traineddata")
