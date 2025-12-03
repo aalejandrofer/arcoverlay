@@ -7,7 +7,9 @@ V1.3.0
 - Item overlay can now display how much you have in storage
 
 **Quest Overlay Enhancements**
-Added Map names for quests
+- Added Map names for quests
+- Added search bar for quests
+- Added map filters for quests
 
 **Item Database**
 - Added quick filter buttons for Blueprints and Storage
@@ -18,7 +20,6 @@ Added Map names for quests
 - Improved item search with multi-language support
 - Added filtering by: Tracked, Storage, Quest Requirements, Hideout Requirements, Project Requirements
 - Added item requirement details showing which quests/hideout/projects need each item
-
 
 **Language & Localization**
 - Fixed overlay text to display in selected language for all item information
@@ -36,6 +37,8 @@ Added Map names for quests
 - Improved visual styling for better contrast and readability
 - Added separator lines between overlay sections
 - Enhanced item cards with rarity-based color coding
+- Added toggle for top banner in progress hub
+- Added Phase 5 to expeditions
 
 **Bug Fixes**
 - Fixed "future hideout" and "projects" settings not affecting overlay display

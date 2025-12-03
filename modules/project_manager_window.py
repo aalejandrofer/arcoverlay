@@ -1,9 +1,110 @@
-from PyQt6.QtWidgets import (QLabel, QPushButton, QFrame, QCheckBox, QMessageBox, QWidget, QVBoxLayout, QHBoxLayout)
-from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import (QLabel, QPushButton, QFrame, QCheckBox, QMessageBox, QWidget, QVBoxLayout, QHBoxLayout, QSizePolicy)
+from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtGui import QPainter, QColor, QFont
 import json
 from .constants import Constants
-from .ui_components import InventoryControl
+from .ui_components import InventoryControl, TextProgressBar
 from .base_page import BasePage
+
+class CategoryProgressBar(TextProgressBar):
+    """
+    A specialized progress bar that formats numbers with commas (e.g. 10,000 / 50,000)
+    but maintains the exact look of the standard Item ProgressBar.
+    """
+    def paintEvent(self, event):
+        # Standard QProgressBar paint
+        super(TextProgressBar, self).paintEvent(event)
+        
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.TextAntialiasing)
+        painter.setBackgroundMode(Qt.BGMode.TransparentMode)
+        
+        # Match font from ui_components
+        font = QFont("Segoe UI")
+        font.setPixelSize(13)
+        font.setBold(True)
+        painter.setFont(font)
+        painter.setPen(QColor("#FFFFFF"))
+        
+        # Formatting with commas
+        text = f"{self.value():,} / {self.maximum():,}"
+        painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, text)
+        painter.end()
+
+class CategoryValueControl(QWidget):
+
+    value_changed = pyqtSignal()
+    
+    def __init__(self, current_value=0, required_value=0):
+        super().__init__()
+        self.current_value = current_value
+        self.required_value = required_value
+        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(5)
+        
+        # 1. -10k Button (Matches -10 size/style)
+        self.btn_minus_10k = QPushButton("-10k")
+        self.btn_minus_10k.setFixedSize(45, 30)
+        self.btn_minus_10k.setObjectName("inv_button")
+        self.btn_minus_10k.setStyleSheet("font-size: 11px; padding: 0px;")
+        self.btn_minus_10k.clicked.connect(lambda: self.increment_value(-10000))
+        layout.addWidget(self.btn_minus_10k)
+        
+        # 2. Minus Button (Matches - size/style)
+        self.btn_minus = QPushButton("-")
+        self.btn_minus.setFixedSize(30, 30)
+        self.btn_minus.setObjectName("inv_button")
+        self.btn_minus.clicked.connect(lambda: self.increment_value(-1))
+        layout.addWidget(self.btn_minus)
+
+        # 3. Progress Bar
+        self.pbar = CategoryProgressBar()
+        self.pbar.setRange(0, self.required_value)
+        self.pbar.setValue(self.current_value)
+        self._update_style()
+        layout.addWidget(self.pbar)
+        
+        # 4. +1 Button (Matches + size/style)
+        self.btn_plus_1 = QPushButton("+1")
+        self.btn_plus_1.setFixedSize(30, 30)
+        self.btn_plus_1.setObjectName("inv_button")
+        self.btn_plus_1.clicked.connect(lambda: self.increment_value(1))
+        layout.addWidget(self.btn_plus_1)
+        
+        # 5. +10k Button (Matches +10 size/style)
+        self.btn_plus_10k = QPushButton("+10k")
+        self.btn_plus_10k.setFixedSize(45, 30)
+        self.btn_plus_10k.setObjectName("inv_button")
+        self.btn_plus_10k.setStyleSheet("font-size: 11px; padding: 0px;")
+        self.btn_plus_10k.clicked.connect(lambda: self.increment_value(10000))
+        layout.addWidget(self.btn_plus_10k)
+    
+    def increment_value(self, amount):
+        """Increment the current value by the specified amount."""
+        self.current_value = max(0, self.current_value + amount)
+        self.pbar.setValue(self.current_value)
+        self._update_style()
+        self.value_changed.emit()
+    
+    def _update_style(self):
+        # Turns the bar green if complete, just like InventoryControl
+        is_complete = (self.current_value >= self.required_value)
+        self.pbar.setProperty("complete", is_complete)
+        self.pbar.style().polish(self.pbar)
+    
+    def get_value(self):
+        """Get the current value."""
+        return self.current_value
+    
+    def set_value(self, value):
+        """Set the current value."""
+        self.current_value = value
+        self.pbar.setValue(self.current_value)
+        self._update_style()
+
 
 class ProjectManagerWindow(BasePage):
     def __init__(self, project_data, user_progress, item_finder, rarity_colors, lang_code="en"):
@@ -18,6 +119,7 @@ class ProjectManagerWindow(BasePage):
             self.user_progress['projects'] = {}
         
         self.inventory_widgets = {} 
+        self.category_widgets = {}  # For category value tracking
         self.phase_frames = {} 
         
         self.chk_show_completed = QCheckBox("Show Completed")
@@ -42,18 +144,25 @@ class ProjectManagerWindow(BasePage):
             
             for phase_info in sorted(project.get('phases', []), key=lambda x: x.get('phase', 0)):
                 phase_num = phase_info.get('phase', 0)
-                reqs = phase_info.get('requirementItemIds', [])
-                if not reqs: continue
+                item_reqs = phase_info.get('requirementItemIds', [])
+                category_reqs = phase_info.get('requirementCategories', [])
+                
+                # Skip phases with no requirements at all
+                if not item_reqs and not category_reqs:
+                    continue
                 
                 wrapper = QWidget()
                 w_layout = QVBoxLayout(wrapper)
-                w_layout.setContentsMargins(0, 10, 0, 10); w_layout.setSpacing(5)
+                w_layout.setContentsMargins(0, 10, 0, 10)
+                w_layout.setSpacing(5)
                 p_layout.addWidget(wrapper)
                 self.phase_frames[(p_id, phase_num)] = wrapper
                 
                 phase_name = phase_info.get('name')
-                if isinstance(phase_name, dict): phase_name = phase_name.get(self.lang_code, phase_name.get('en', ''))
-                elif not isinstance(phase_name, str): phase_name = ""
+                if isinstance(phase_name, dict):
+                    phase_name = phase_name.get(self.lang_code, phase_name.get('en', ''))
+                elif not isinstance(phase_name, str):
+                    phase_name = ""
                     
                 h_row = QHBoxLayout()
                 title_text = f"Phase {phase_num}: {phase_name}"
@@ -64,26 +173,70 @@ class ProjectManagerWindow(BasePage):
                 btn_complete.setFixedWidth(120)
                 btn_complete.clicked.connect(lambda _, pid=p_id, pn=phase_num: self.toggle_phase_completion(pid, pn))
                 
-                h_row.addWidget(title); h_row.addStretch(); h_row.addWidget(btn_complete)
+                h_row.addWidget(title)
+                h_row.addStretch()
+                h_row.addWidget(btn_complete)
                 w_layout.addLayout(h_row)
                 
-                for req in reqs:
-                    item_id, qty = req.get('itemId'), req.get('quantity', 0)
-                    item_name = self.item_finder.get_localized_name(item_id, self.lang_code)
-                    saved = self.user_progress.get('projects', {}).get(p_id, {}).get('inventory', {}).get(str(phase_num), {}).get(item_id, 0)
-                    
-                    row = QHBoxLayout()
-                    item_obj = self.item_finder.id_to_item_map.get(item_id)
-                    rarity = item_obj.get('rarity', 'Common') if item_obj else 'Common'
-                    color = self.rarity_colors.get(rarity, "#E0E0E0")
-                    
-                    lbl = QLabel(item_name); lbl.setStyleSheet(f"color: {color}; border: none;")
-                    ctrl = InventoryControl(saved, qty, show_extra_buttons=True)
-                    ctrl.value_changed.connect(self.start_save_timer)
-                    self.inventory_widgets[(p_id, phase_num, item_id)] = ctrl
-                    
-                    row.addWidget(lbl); row.addStretch(1); row.addWidget(ctrl)
-                    w_layout.addLayout(row)
+                # Add description if it exists (for Phase 5)
+                description = phase_info.get('description')
+                if description:
+                    if isinstance(description, dict):
+                        desc_text = description.get(self.lang_code, description.get('en', ''))
+                    else:
+                        desc_text = description
+                    if desc_text:
+                        desc_label = QLabel(desc_text)
+                        desc_label.setWordWrap(True)
+                        desc_label.setStyleSheet("color: #ABB2BF; border: none; font-size: 12px; margin-top: 5px; margin-bottom: 10px;")
+                        w_layout.addWidget(desc_label)
+                
+                # Handle item-based requirements
+                if item_reqs:
+                    for req in item_reqs:
+                        item_id, qty = req.get('itemId'), req.get('quantity', 0)
+                        item_name = self.item_finder.get_localized_name(item_id, self.lang_code)
+                        saved = self.user_progress.get('projects', {}).get(p_id, {}).get('inventory', {}).get(str(phase_num), {}).get(item_id, 0)
+                        
+                        row = QHBoxLayout()
+                        item_obj = self.item_finder.id_to_item_map.get(item_id)
+                        rarity = item_obj.get('rarity', 'Common') if item_obj else 'Common'
+                        color = self.rarity_colors.get(rarity, "#E0E0E0")
+                        
+                        lbl = QLabel(item_name)
+                        lbl.setStyleSheet(f"color: {color}; border: none;")
+                        ctrl = InventoryControl(saved, qty, show_extra_buttons=True)
+                        ctrl.value_changed.connect(self.start_save_timer)
+                        self.inventory_widgets[(p_id, phase_num, item_id)] = ctrl
+                        
+                        row.addWidget(lbl)
+                        row.addStretch(1)
+                        row.addWidget(ctrl)
+                        w_layout.addLayout(row)
+                
+                # Handle category-based requirements (Phase 5)
+                if category_reqs:
+                    for cat_req in category_reqs:
+                        category_name = cat_req.get('category', '')
+                        value_required = cat_req.get('valueRequired', 0)
+                        saved_value = self.user_progress.get('projects', {}).get(p_id, {}).get('categories', {}).get(str(phase_num), {}).get(category_name, 0)
+                        
+                        row = QHBoxLayout()
+                        
+                        # Category label - styled like item names but Gold color
+                        lbl = QLabel(category_name)
+                        lbl.setStyleSheet("color: #E5C07B; border: none;")
+                        row.addWidget(lbl)
+                        
+                        row.addStretch(1)
+                        
+                        # Category value control - now consistent with InventoryControl
+                        ctrl = CategoryValueControl(saved_value, value_required)
+                        ctrl.value_changed.connect(self.start_save_timer)
+                        self.category_widgets[(p_id, phase_num, category_name)] = ctrl
+                        
+                        row.addWidget(ctrl)
+                        w_layout.addLayout(row)
                 
                 wrapper.setProperty("btn_complete", btn_complete)
         self.refresh_visibility()
@@ -99,42 +252,73 @@ class ProjectManagerWindow(BasePage):
             btn.setStyleSheet("font-size: 11px;")
             if is_completed:
                 wrapper.setVisible(show_completed)
-                btn.setText("Re-Open"); btn.setEnabled(True); btn.setObjectName("action_button_red") 
+                btn.setText("Re-Open")
+                btn.setEnabled(True)
+                btn.setObjectName("action_button_red") 
             else:
                 wrapper.setVisible(True)
-                btn.setText("Complete Phase"); btn.setEnabled(is_next)
-                if is_next: btn.setObjectName("action_button_green")
-                else: btn.setObjectName("") 
+                btn.setText("Complete Phase")
+                btn.setEnabled(is_next)
+                if is_next:
+                    btn.setObjectName("action_button_green")
+                else:
+                    btn.setObjectName("") 
             btn.style().polish(btn)
 
     def toggle_phase_completion(self, p_id, p_num):
-        progress = self.user_progress['projects'].setdefault(p_id, {'completed_phase': 0, 'inventory': {}})
+        progress = self.user_progress['projects'].setdefault(p_id, {'completed_phase': 0, 'inventory': {}, 'categories': {}})
         curr = progress.get('completed_phase', 0)
-        if p_num <= curr: progress['completed_phase'] = p_num - 1
-        elif p_num == curr + 1: progress['completed_phase'] = p_num
-        self.start_save_timer(); self.refresh_visibility()
+        if p_num <= curr:
+            progress['completed_phase'] = p_num - 1
+        elif p_num == curr + 1:
+            progress['completed_phase'] = p_num
+        self.start_save_timer()
+        self.refresh_visibility()
 
     def reset_project_progress_confirmation(self):
-        msg = QMessageBox(); msg.setWindowTitle("Confirm Reset")
+        msg = QMessageBox()
+        msg.setWindowTitle("Confirm Reset")
         msg.setText("Are you sure you want to completely reset ALL Expedition progress?")
         msg.setIcon(QMessageBox.Icon.Warning)
         msg.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         msg.setDefaultButton(QMessageBox.StandardButton.No)
-        if msg.exec() == QMessageBox.StandardButton.Yes: self.reset_state()
+        if msg.exec() == QMessageBox.StandardButton.Yes:
+            self.reset_state()
 
     # --- BASE PAGE OVERRIDES ---
     def reset_state(self):
         self.user_progress['projects'] = {}
-        for ctrl in self.inventory_widgets.values(): ctrl.value = 0; ctrl.change(0) 
-        self.start_save_timer(); self.refresh_visibility()
+        for ctrl in self.inventory_widgets.values():
+            ctrl.value = 0
+            ctrl.change(0) 
+        for ctrl in self.category_widgets.values():
+            ctrl.set_value(0)
+        self.start_save_timer()
+        self.refresh_visibility()
 
     def save_state(self):
+        # Save item-based inventory
         for (p_id, p_num, item_id), widget in self.inventory_widgets.items():
              inv_dict = self.user_progress.setdefault('projects', {}).setdefault(p_id, {}).setdefault('inventory', {})
              phase_dict = inv_dict.setdefault(str(p_num), {})
              val = widget.get_value()
-             if val > 0: phase_dict[item_id] = val
-             elif item_id in phase_dict: del phase_dict[item_id]
+             if val > 0:
+                 phase_dict[item_id] = val
+             elif item_id in phase_dict:
+                 del phase_dict[item_id]
+        
+        # Save category values
+        for (p_id, p_num, category_name), widget in self.category_widgets.items():
+            cat_dict = self.user_progress.setdefault('projects', {}).setdefault(p_id, {}).setdefault('categories', {})
+            phase_dict = cat_dict.setdefault(str(p_num), {})
+            val = widget.get_value()
+            if val > 0:
+                phase_dict[category_name] = val
+            elif category_name in phase_dict:
+                del phase_dict[category_name]
+        
         try:
-            with open(Constants.PROGRESS_FILE, 'w', encoding='utf-8') as f: json.dump(self.user_progress, f, indent=2)
-        except Exception as e: print(f"Error saving project progress: {e}")
+            with open(Constants.PROGRESS_FILE, 'w', encoding='utf-8') as f:
+                json.dump(self.user_progress, f, indent=2)
+        except Exception as e:
+            print(f"Error saving project progress: {e}")
