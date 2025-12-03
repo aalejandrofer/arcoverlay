@@ -299,8 +299,8 @@ class SettingsWindow(BasePage):
 
         # Modifiers Card
         card_mod = SettingsCard(); l_mod = QVBoxLayout(card_mod); l_mod.setContentsMargins(10, 10, 10, 10)
-        self.chk_future_hideout = ModernToggle("Show All Future Hideout Requirements")
-        self.chk_future_project = ModernToggle("Show All Future Project Requirements")
+        self.chk_future_hideout = ModernToggle("Show Future Hideout Requirements")
+        self.chk_future_project = ModernToggle("Show Future Expedition Requirements")
         l_mod.addWidget(self.chk_future_hideout); l_mod.addWidget(self.chk_future_project)
         left_col.addWidget(card_mod)
 
@@ -534,8 +534,8 @@ class SettingsWindow(BasePage):
         # Item Overlay
         self.item_font_size.setValue(self.cfg.get_int('ItemOverlay', 'font_size', 12))
         self.item_duration.setValue(int(self.cfg.get_float('ItemOverlay', 'duration_seconds', 3.0) * 10))
-        self.chk_future_hideout.setChecked(self.cfg.get_bool('ItemOverlay', 'show_all_future_reqs', False))
-        self.chk_future_project.setChecked(self.cfg.get_bool('ItemOverlay', 'show_all_future_project_reqs', False))
+        self.chk_future_hideout.setChecked(self.cfg.get_bool('ItemOverlay', 'show_all_future_reqs', True))
+        self.chk_future_project.setChecked(self.cfg.get_bool('ItemOverlay', 'show_all_future_project_reqs', True))
         
         # Order List - Check for fresh config
         is_fresh_config = not self.cfg.parser.has_section('ItemOverlay')
@@ -569,6 +569,8 @@ class SettingsWindow(BasePage):
         for key in order_list:
              # Default to True for all standard sections on first run
              self.cfg.set('ItemOverlay', self.SECTIONS[key][1], True)
+        self.cfg.set('ItemOverlay', 'show_all_future_reqs', True)
+        self.cfg.set('ItemOverlay', 'show_all_future_project_reqs', True)
         self.cfg.save()
 
     def save_settings(self):
