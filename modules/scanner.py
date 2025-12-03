@@ -60,16 +60,15 @@ class ItemScanner:
             debug_prefix = datetime.now().strftime("%Y%m%d_%H%M%S")
 
         # 1. Capture Image (Pass Debug Info)
+        # This returns the image cropped to the specific background color region (The whole tooltip)
         img = ImageProcessor.capture_and_process(self.target_color, full_screen=full_screen, debug_path=debug_path, debug_prefix=debug_prefix)
         if img is None:
             return None
         
-        # --- DEBUG: SAVE CROPPED COLOR IMAGE ---
-        # This saves the image AFTER cropping but BEFORE Grayscale conversion.
-        # This allows you to see if the Color Cropper worked correctly.
+        # --- DEBUG: SAVE RAW TOOLTIP IMAGE ---
         if self.save_debug_images and debug_path and debug_prefix:
             try:
-                cropped_filename = f"{debug_prefix}_cropped.png"
+                cropped_filename = f"{debug_prefix}_tooltip_raw.png"
                 img.save(os.path.join(debug_path, cropped_filename))
             except Exception as e:
                 print(f"Failed to save debug cropped image: {e}")
@@ -80,15 +79,24 @@ class ItemScanner:
             if ImageProcessor.find_color_region(img, self.target_color):
                 print("[DEBUG] Tooltip color region found! Cropping to tooltip.")
         
+        # --- OPTIMIZATION: Crop to Top 30% (Header) ---
+        # We only need the Name, which is always at the top. 
+        # Scanning the description/stats wastes CPU and can introduce OCR noise.
+        w, h = img.size
+        # Ensure we don't crop if the image is too small (unlikely for a valid tooltip)
+        if h > 50:
+            img = img.crop((0, 0, w, int(h * 0.30)))
+        # ----------------------------------------------
+
         # 3. Enhance Image for OCR
         img = img.convert('L') # Convert to Grayscale
         enhancer = ImageEnhance.Contrast(img)
         img = enhancer.enhance(2.0) # High Contrast
         
-        # --- DEBUG: SAVE PROCESSED OCR IMAGE ---
+        # --- DEBUG: SAVE PROCESSED HEADER IMAGE ---
         if self.save_debug_images and debug_path and debug_prefix:
             try:
-                processed_filename = f"{debug_prefix}_processed.png"
+                processed_filename = f"{debug_prefix}_processed_header.png"
                 img.save(os.path.join(debug_path, processed_filename))
             except Exception as e:
                 print(f"Failed to save debug processed image: {e}")

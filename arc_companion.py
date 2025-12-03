@@ -25,7 +25,7 @@ import scipy.special
 import scipy.spatial.transform
 import rapidfuzz 
 
-APP_VERSION = "1.3.1"
+APP_VERSION = "1.3.0"
 APP_UPDATE_URL = "https://arc-companion.xyz/check_update.php" 
 
 @dataclass
