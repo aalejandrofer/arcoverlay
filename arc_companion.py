@@ -1,5 +1,5 @@
 from __future__ import annotations
-import argparse, os, sys, time, traceback
+import argparse, os, sys, traceback
 import ctypes
 from dataclasses import dataclass
 from typing import Optional
@@ -20,10 +20,8 @@ from modules.update_checker import UpdateChecker
 from modules.app_updater import AppUpdateChecker
 from modules.config_manager import ConfigManager
 
-import scipy.ndimage
-import scipy.special
-import scipy.spatial.transform
-import rapidfuzz 
+# --- SCIPY IMPORTS REMOVED HERE ---
+# (They used to be here, but we deleted them because we use OpenCV now)
 
 APP_VERSION = "1.3.0"
 APP_UPDATE_URL = "https://arc-companion.xyz/check_update.php" 
@@ -67,6 +65,29 @@ class HotkeyListener(QObject):
     def _on_item_check(self): self.item_check_triggered.emit()
     def _on_quest_log(self): self.quest_log_triggered.emit()
 
+# --- SCAN WORKER (THREADING) ---
+class ScanWorker(QObject):
+    """
+    Runs the screen scanning and OCR process in a separate thread.
+    """
+    finished = pyqtSignal(object)
+    error = pyqtSignal(str)
+
+    def __init__(self, scanner: ItemScanner, from_tray: bool):
+        super().__init__()
+        self.scanner = scanner
+        self.from_tray = from_tray
+
+    def run(self):
+        try:
+            # This calls the new OpenCV+MSS scanner
+            result = self.scanner.scan_screen(full_screen=self.from_tray)
+            self.finished.emit(result)
+        except Exception as e:
+            traceback.print_exc()
+            self.error.emit(str(e))
+            self.finished.emit(None)
+
 class ArcCompanionApp(QObject):
     start_data_download = pyqtSignal(list)
     start_lang_download = pyqtSignal(str)
@@ -85,6 +106,7 @@ class ArcCompanionApp(QObject):
         self.db = ItemDatabase()
         self.data_manager = DataManager(self.db.items)
         self.overlays = []
+        self.scan_thread = None 
 
         # 3. Initialize Scanner
         self.scanner = ItemScanner(self.cmd_config, self.data_manager)
@@ -102,7 +124,6 @@ class ArcCompanionApp(QObject):
         )
         self.progress_hub.progress_saved.connect(self.data_manager.reload_progress)
         
-        # Connect Settings Window Signals
         self.progress_hub.settings_tab.request_data_update.connect(self.run_manual_data_check)
         self.progress_hub.settings_tab.request_lang_download.connect(self.run_lang_download)
         self.progress_hub.settings_tab.request_app_update.connect(lambda: self.check_for_app_updates(manual=True))
@@ -168,9 +189,7 @@ class ArcCompanionApp(QObject):
             if tess_c == self.ocr_lang_code:
                 self.json_lang_code = json_c; break
         
-        # Read Ultra-Wide Setting
         full_screen = self.config_manager.get_bool('OCR', 'full_screen_scan', False)
-        # Read Debug Images Setting
         save_debug = self.config_manager.get_bool('OCR', 'save_debug_images', False)
 
         self.scanner.update_settings(self.target_color, self.ocr_lang_code, self.json_lang_code, full_screen_mode=full_screen, save_debug_images=save_debug)
@@ -178,19 +197,43 @@ class ArcCompanionApp(QObject):
         if is_initial_load: print(f"[INFO] Settings Loaded. Lang: {self.ocr_lang_code}")
         else: print("Settings reloaded.")
 
+    # --- ITEM CHECK WITH THREADING ---
     def process_item_check(self, from_tray=False):
-        print("\n--- Triggering Item Check ---")
-        try:
-            for overlay in self.overlays: overlay.close()
-            self.overlays.clear()
-            # Removed time.sleep(0.1) for instant response
-            scan_result = self.scanner.scan_screen(full_screen=from_tray)
-            if scan_result: self.display_item_overlay(scan_result)
-        except Exception as e: print(f"Error: {e}"); traceback.print_exc()
+        # 1. Close overlays
+        for overlay in self.overlays: 
+            overlay.close()
+        self.overlays.clear()
+
+        # 2. Prevent overlapping scans (CRASH FIX)
+        if self.scan_thread:
+            try:
+                if self.scan_thread.isRunning():
+                    print("[INFO] Scan already in progress.")
+                    return
+            except RuntimeError:
+                # The C++ object was deleted, but Python reference exists.
+                # We catch the error and reset the variable so we can start fresh.
+                self.scan_thread = None
+
+        # 3. Setup Worker
+        self.scan_thread = QThread()
+        self.scan_worker = ScanWorker(self.scanner, from_tray)
+        self.scan_worker.moveToThread(self.scan_thread)
+
+        self.scan_thread.started.connect(self.scan_worker.run)
+        self.scan_worker.finished.connect(self.handle_scan_result)
+        self.scan_worker.finished.connect(self.scan_thread.quit)
+        self.scan_worker.finished.connect(self.scan_worker.deleteLater)
+        self.scan_thread.finished.connect(self.scan_thread.deleteLater)
+
+        self.scan_thread.start()
+
+    def handle_scan_result(self, scan_result):
+        if scan_result:
+            self.display_item_overlay(scan_result)
 
     def process_quest_log(self):
         try:
-            print("Processing Quest Log display...")
             tracked = self.data_manager.get_filtered_quests(tracked_only=True, lang_code=self.json_lang_code)
             self.display_quest_overlay(tracked)
         except Exception as e: print(f"Error: {e}")
@@ -203,7 +246,6 @@ class ArcCompanionApp(QObject):
         ov = QuestOverlayUI.create_window(tracked, self.config_manager.parser, self.data_manager, lang_code=self.json_lang_code)
         self.overlays.append(ov)
 
-    # --- DATA UPDATE LOGIC ---
     def ensure_data_exists(self):
         if not (os.path.exists(Constants.DATA_DIR) and os.path.exists(os.path.join(Constants.DATA_DIR, 'versions.json'))):
             msg = QMessageBox()
@@ -295,27 +337,49 @@ class ArcCompanionApp(QObject):
         if manual: self.app_update_worker.check_finished.connect(lambda: QMessageBox.information(None, "Up to Date", f"Version {APP_VERSION} is the latest."))
         self.app_update_thread.start()
 
+        
     def cleanup_threads(self):
-        if hasattr(self, 'hotkey_worker') and self.hotkey_worker: self.hotkey_worker.stop()
-        if hasattr(self, 'hotkey_thread') and self.hotkey_thread: self.hotkey_thread.quit(); self.hotkey_thread.wait()
-        if hasattr(self, 'data_update_thread') and self.data_update_thread: self.data_update_thread.quit(); self.data_update_thread.wait()
-        if hasattr(self, 'progress_hub'): self.progress_hub.cleanup()
+            # Hotkey Worker
+            if hasattr(self, 'hotkey_worker') and self.hotkey_worker: 
+                try:
+                    self.hotkey_worker.stop()
+                except RuntimeError: pass
+
+            # Hotkey Thread
+            if hasattr(self, 'hotkey_thread') and self.hotkey_thread:
+                try:
+                    self.hotkey_thread.quit()
+                    self.hotkey_thread.wait()
+                except RuntimeError: pass
+
+            # Scan Thread (The one causing the error)
+            if hasattr(self, 'scan_thread') and self.scan_thread: 
+                try:
+                    if self.scan_thread.isRunning():
+                        self.scan_thread.quit()
+                        self.scan_thread.wait()
+                except RuntimeError: 
+                    pass # Thread was already deleted, which is fine
+
+            # Data Update Thread
+            if hasattr(self, 'data_update_thread') and self.data_update_thread: 
+                try:
+                    self.data_update_thread.quit()
+                    self.data_update_thread.wait()
+                except RuntimeError: pass
+
+            # Progress Hub
+            if hasattr(self, 'progress_hub'): 
+                try:
+                    self.progress_hub.cleanup()
+                except RuntimeError: pass
 
     def quit_app(self): self.app.quit()
     def run(self): sys.exit(self.app.exec())
 
     def restore_app(self):
-        """
-        Restores the window whether it is hidden OR minimized.
-        """
-        # 1. Ensure the window is visible (fixes the "Closed" case)
         self.progress_hub.show()
-        
-        # 2. Un-minimize the window (fixes the "Minimized" case)
-        # This forces the window out of the taskbar and into 'Normal' state
         self.progress_hub.setWindowState(Qt.WindowState.WindowActive)
-        
-        # 3. Bring to front and focus (fixes getting lost behind other windows)
         self.progress_hub.activateWindow()
         self.progress_hub.raise_()
 
@@ -329,11 +393,9 @@ def main():
     config = Config.from_args(parser.parse_args())
     
     try:
-        # The string can be anything, but must be unique
         myappid = f'joopzor.arccompanion.client.{APP_VERSION}'
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
-    except ImportError:
-        pass
+    except ImportError: pass
 
     try:
         app_instance = QApplication(sys.argv)

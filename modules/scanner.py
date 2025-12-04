@@ -59,25 +59,26 @@ class ItemScanner:
             os.makedirs(debug_path, exist_ok=True)
             debug_prefix = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-        # 1. Capture Image (Pass Debug Info)
+        # 1. Capture Image
         # This returns the image cropped to the specific background color region (The whole tooltip)
+        # The new ImageProcessor handles the finding and cropping internally using OpenCV.
         img = ImageProcessor.capture_and_process(self.target_color, full_screen=full_screen, debug_path=debug_path, debug_prefix=debug_prefix)
+        
         if img is None:
             return None
         
-        # --- DEBUG: SAVE RAW TOOLTIP IMAGE ---
+        # --- DEBUG: SAVE RAW TOOLTIP IMAGE (Cropped Result) ---
         if self.save_debug_images and debug_path and debug_prefix:
             try:
-                cropped_filename = f"{debug_prefix}_tooltip_raw.png"
+                cropped_filename = f"{debug_prefix}_tooltip_result.png"
                 img.save(os.path.join(debug_path, cropped_filename))
             except Exception as e:
                 print(f"Failed to save debug cropped image: {e}")
         # ---------------------------------------
         
-        # 2. Debug: Check color region
-        if self.cmd_config.debug:
-            if ImageProcessor.find_color_region(img, self.target_color):
-                print("[DEBUG] Tooltip color region found! Cropping to tooltip.")
+        # 2. (REMOVED) Incompatible Debug Check
+        # The old code checked find_color_region() here using PIL, which crashes OpenCV.
+        # Since capture_and_process already performed the find/crop, we trust the result.
         
         # --- OPTIMIZATION: Crop to Top 30% (Header) ---
         # We only need the Name, which is always at the top. 

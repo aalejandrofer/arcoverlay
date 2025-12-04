@@ -2,27 +2,17 @@
 # ArcCompanion PyInstaller Specification File
 
 import os
+import sys
 
+# Check for Tesseract presence during build
 tess_exe = os.path.join("Tesseract-OCR", "tesseract.exe")
 if not os.path.exists(tess_exe):
-    print(f"\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-    print(f"CRITICAL ERROR: 'tesseract.exe' is missing!")
-    print(f"Location looked for: {os.path.abspath(tess_exe)}")
-    print(f"Your Tesseract-OCR folder is likely empty or missing binaries.")
-    print(f"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n")
-    sys.exit(1) # Stop the build immediately
-# --------------------
-from PyInstaller.utils.hooks import collect_all
+    print(f"\nCRITICAL ERROR: 'tesseract.exe' is missing!")
+    sys.exit(1)
 
 block_cipher = None
 
-# --- 1. COLLECT BINARIES FOR MATH LIBRARIES ---
-# This is the vital part missing from your spec. 
-# Without this, the EXE has the code but not the engines to run Scipy/Rapidfuzz.
-scipy_bin, scipy_data, scipy_hidden = collect_all('scipy')
-rf_bin, rf_data, rf_hidden = collect_all('rapidfuzz')
-
-# --- 2. HIDDEN IMPORTS ---
+# --- 1. HIDDEN IMPORTS ---
 hidden_imports = [
     'PyQt6.QtCore',
     'PyQt6.QtGui',
@@ -30,22 +20,15 @@ hidden_imports = [
     'pytesseract',
     'Pillow',
     'PIL',
+    'mss',           # <--- MSS for Screen Capture
+    'cv2',           # <--- OpenCV for Image Processing
+    'numpy',
     'pynput',
-    'pynput.keyboard._win32', # Critical for Hotkeys
+    'pynput.keyboard._win32',
     'pynput.mouse._win32',
     'pyperclip',
-    'numpy',
-    'requests', 
-    # Critical Scipy/Image components
-    'scipy',
-    'scipy.ndimage',
-    'scipy.special',
-    'scipy.spatial.transform',
+    'requests',
 ]
-
-# Add the extra imports found by collect_all
-hidden_imports.extend(scipy_hidden)
-hidden_imports.extend(rf_hidden)
 
 # Project Modules
 hidden_imports.extend([
@@ -67,12 +50,12 @@ hidden_imports.extend([
     'modules.update_checker',
 ])
 
-# --- 3. DATA FILES ---
+# --- 2. DATA FILES ---
 datas = [
     ('arccompanion.ico', '.'),
     ('arccompanion.png', '.'),
     ('Tesseract-OCR', 'Tesseract-OCR'), 
-    ('modules', 'modules'),  # Keeping your preference to include this as data
+    ('modules', 'modules'),
 
     # Bundled Assets
     ('data/images/coins.svg',        'bundled_assets'),
@@ -80,26 +63,16 @@ datas = [
     ('data/images/support_banner.png', 'bundled_assets'),
 ]
 
-# Add the extra data files found by collect_all
-datas.extend(scipy_data)
-datas.extend(rf_data)
-
-# --- 4. BINARIES ---
-# This was empty in your file, which is why Scipy failed.
-binaries = []
-binaries.extend(scipy_bin)
-binaries.extend(rf_bin)
-
 a = Analysis(
     ['arc_companion.py'],
     pathex=[],
-    binaries=binaries, # Pass the collected binaries here
+    binaries=[],  # <--- Scipy binaries removed
     datas=datas,
     hiddenimports=hidden_imports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=['matplotlib', 'tkinter'], 
+    excludes=['matplotlib', 'tkinter', 'scipy'], # <--- Explicitly exclude scipy
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,
@@ -122,7 +95,7 @@ exe = EXE(
     upx=True,
     upx_exclude=[],
     runtime_tmpdir=None,
-    console=False, # TEMPORARILY set to True to see errors if it still fails
+    console=False, 
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
