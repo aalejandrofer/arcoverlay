@@ -61,7 +61,6 @@ class ItemScanner:
 
         # 1. Capture Image
         # This returns the image cropped to the specific background color region (The whole tooltip)
-        # The new ImageProcessor handles the finding and cropping internally using OpenCV.
         img = ImageProcessor.capture_and_process(self.target_color, full_screen=full_screen, debug_path=debug_path, debug_prefix=debug_prefix)
         
         if img is None:
@@ -76,15 +75,10 @@ class ItemScanner:
                 print(f"Failed to save debug cropped image: {e}")
         # ---------------------------------------
         
-        # 2. (REMOVED) Incompatible Debug Check
-        # The old code checked find_color_region() here using PIL, which crashes OpenCV.
-        # Since capture_and_process already performed the find/crop, we trust the result.
-        
         # --- OPTIMIZATION: Crop to Top 30% (Header) ---
         # We only need the Name, which is always at the top. 
         # Scanning the description/stats wastes CPU and can introduce OCR noise.
         w, h = img.size
-        # Ensure we don't crop if the image is too small (unlikely for a valid tooltip)
         if h > 50:
             img = img.crop((0, 0, w, int(h * 0.30)))
         # ----------------------------------------------
@@ -103,19 +97,25 @@ class ItemScanner:
                 print(f"Failed to save debug processed image: {e}")
         # ---------------------------------------
         
-        # 4. Setup Language / Tesseract Config
+        # 4. Setup Language / Tesseract Config (WITH WHITELIST OPTIMIZATION)
         custom_lang_file = os.path.join(Constants.TESSDATA_DIR, f"{self.ocr_lang_code}.traineddata")
         
+        # Determine effective language
         if os.path.exists(custom_lang_file):
             os.environ["TESSDATA_PREFIX"] = Constants.TESSDATA_DIR
-            tess_config = "--psm 6"
             lang = self.ocr_lang_code
         else:
             if "TESSDATA_PREFIX" in os.environ: del os.environ["TESSDATA_PREFIX"]
             if self.ocr_lang_code != 'eng':
                 print(f"[WARN] Language file for '{self.ocr_lang_code}' not found. Falling back to 'eng'.")
-            tess_config = "--psm 6"
             lang = 'eng'
+
+        # Apply whitelist ONLY if English is selected
+        if lang == 'eng':
+            whitelist = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789- '"
+            tess_config = f"--psm 6 -c tessedit_char_whitelist=\"{whitelist}\""
+        else:
+            tess_config = "--psm 6"
         
         # 5. Run OCR
         try:
