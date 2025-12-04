@@ -388,7 +388,14 @@ class ArcCompanionApp(QObject):
 
     def restore_app(self):
         self.progress_hub.show()
-        self.progress_hub.setWindowState(Qt.WindowState.WindowActive)
+        # First restore from minimized state if needed
+        if self.progress_hub.windowState() & Qt.WindowState.WindowMinimized:
+            self.progress_hub.setWindowState(self.progress_hub.windowState() & ~Qt.WindowState.WindowMinimized)
+        # Force window to the foreground on Windows
+        self.progress_hub.setWindowFlags(self.progress_hub.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
+        self.progress_hub.show()
+        self.progress_hub.setWindowFlags(self.progress_hub.windowFlags() & ~Qt.WindowType.WindowStaysOnTopHint)
+        self.progress_hub.show()
         self.progress_hub.activateWindow()
         self.progress_hub.raise_()
 
