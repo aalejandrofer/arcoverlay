@@ -4,7 +4,8 @@ pytesseract
 rapidfuzz
 pyperclip
 pynput
-scipy
 pystray
 pyqt6
 requests
+mss
+opencv-python-headless

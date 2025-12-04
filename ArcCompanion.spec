@@ -20,6 +20,7 @@ hidden_imports = [
     'pytesseract',
     'Pillow',
     'PIL',
+    'PIL.PngImagePlugin', # <--- CRITICAL FIX: Adds PNG saving support
     'mss',           # <--- MSS for Screen Capture
     'cv2',           # <--- OpenCV for Image Processing
     'numpy',
