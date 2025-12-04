@@ -60,7 +60,7 @@ class ItemScanner:
             debug_prefix = datetime.now().strftime("%Y%m%d_%H%M%S")
 
         # 1. Capture Image
-        # This returns the image cropped to the specific background color region (The whole tooltip)
+        # The ImageProcessor now uses MSS (Fast) + OpenCV (Accuracy)
         img = ImageProcessor.capture_and_process(self.target_color, full_screen=full_screen, debug_path=debug_path, debug_prefix=debug_prefix)
         
         if img is None:
@@ -97,7 +97,7 @@ class ItemScanner:
                 print(f"Failed to save debug processed image: {e}")
         # ---------------------------------------
         
-        # 4. Setup Language / Tesseract Config (WITH WHITELIST OPTIMIZATION)
+        # 4. Setup Language / Tesseract Config (WITH SAFE ENGLISH WHITELIST)
         custom_lang_file = os.path.join(Constants.TESSDATA_DIR, f"{self.ocr_lang_code}.traineddata")
         
         # Determine effective language
@@ -112,8 +112,10 @@ class ItemScanner:
 
         # Apply whitelist ONLY if English is selected
         if lang == 'eng':
-            whitelist = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789- '"
-            tess_config = f"--psm 6 -c tessedit_char_whitelist=\"{whitelist}\""
+            # Whitelist: a-z, A-Z, 0-9, Hyphen
+            # We removed space/quotes to ensure it never crashes the command line parser.
+            whitelist = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-"
+            tess_config = f"--psm 6 -c tessedit_char_whitelist={whitelist}"
         else:
             tess_config = "--psm 6"
         
