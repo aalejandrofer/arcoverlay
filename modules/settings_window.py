@@ -39,6 +39,7 @@ class SettingsWindow(BasePage):
         
         self.start_hotkey_price = ""
         self.start_hotkey_quest = ""
+        self.start_hotkey_hub = ""
         self.preview_widgets = {} 
         
         # Timer for color picker
@@ -132,6 +133,12 @@ class SettingsWindow(BasePage):
         
         self.quest_hotkey_btn = HotkeyButton()
         add_hk("Quest Log Hotkey:", self.quest_hotkey_btn)
+
+        div_hk2 = QFrame(); div_hk2.setFrameShape(QFrame.Shape.HLine); div_hk2.setStyleSheet("background: #333;")
+        l_hk.addWidget(div_hk2)
+
+        self.hub_hotkey_btn = HotkeyButton()
+        add_hk("Progress Hub Hotkey:", self.hub_hotkey_btn)
         
         hk_hint = QLabel("Note: Changes to hotkeys require an application restart.")
         hk_hint.setStyleSheet("color: #E5C07B; font-style: italic; font-size: 11px; border:none; background:transparent;")
@@ -359,7 +366,11 @@ class SettingsWindow(BasePage):
         # SAFETY CHECK: If this triggers before UI is built, return immediately
         if not hasattr(self, 'item_font_size'): return
 
-        size = self.item_font_size.value()
+        # Use a fixed reasonable size for preview so it doesn't break layout
+        # The user is changing the ACTUAL overlay size, but the preview can stay static or scale slightly less aggressively
+        # For now, let's keep it static to prevent "breaking" the look
+        size = 12 
+        
         self.p_title.setStyleSheet(f"font-size: {size + 3}pt; font-weight: bold; color: #C678DD; border: none; background: transparent;")
         style_main = f"font-size: {size}pt; color: #E0E6ED; border: none; background: transparent;"; style_sub = f"font-size: {size}pt; color: #ABB2BF; margin-left: 10px; border: none; background: transparent;"
         for i in reversed(range(1, self.p_layout.count())): item = self.p_layout.itemAt(i); (item.widget().setParent(None) if item.widget() else self.p_layout.removeItem(item))
@@ -372,32 +383,33 @@ class SettingsWindow(BasePage):
                 self.p_layout.addWidget(w); w.setStyleSheet(style_main); w.show(); sub = self.preview_widgets.get(f"{key}_detail")
                 if sub: self.p_layout.addWidget(sub); sub.setStyleSheet(style_sub); sub.show()
                 first = False
-        self.p_layout.addStretch(); self.preview_frame.setFixedWidth(max(280, int(size * 22)))
+        self.p_layout.addStretch()
 
     def save_state(self): self.save_settings()
     def reset_state(self): pass 
 
     def load_settings(self):
-        self.hotkey_btn.set_hotkey(self.cfg.get_str('Hotkeys', 'price_check', "ctrl+f")); self.quest_hotkey_btn.set_hotkey(self.cfg.get_str('Hotkeys', 'quest_log', "ctrl+e")); self.start_hotkey_price = self.hotkey_btn.current_key_string; self.start_hotkey_quest = self.quest_hotkey_btn.current_key_string
-        lang_code = self.cfg.get_str('General', 'language', 'eng')
+        self.hotkey_btn.set_hotkey(self.cfg.get_item_hotkey()); self.quest_hotkey_btn.set_hotkey(self.cfg.get_quest_hotkey()); self.hub_hotkey_btn.set_hotkey(self.cfg.get_hub_hotkey())
+        self.start_hotkey_price = self.hotkey_btn.current_key_string; self.start_hotkey_quest = self.quest_hotkey_btn.current_key_string; self.start_hotkey_hub = self.hub_hotkey_btn.current_key_string
+        lang_code = self.cfg.get_language()
         for name, (json_code, tess_code) in Constants.LANGUAGES.items():
             if tess_code == lang_code or json_code == lang_code: self.lang_combo.setCurrentText(name); break
         
-        color_str = self.cfg.get_str('OCR', 'target_color', "249, 238, 223")
+        color_str = self.cfg.get_ocr_color()
         try: parts = [int(x.strip()) for x in color_str.split(',')]; (self.spin_r.setValue(parts[0]), self.spin_g.setValue(parts[1]), self.spin_b.setValue(parts[2])) if len(parts) == 3 else self._reset_ocr_color()
         except ValueError: self._reset_ocr_color()
         self._update_color_preview()
 
-        self.item_font_size.setValue(self.cfg.get_int('ItemOverlay', 'font_size', 12))
-        self.item_duration.setValue(int(self.cfg.get_float('ItemOverlay', 'duration_seconds', 3.0) * 10))
-        self.chk_future_hideout.setChecked(self.cfg.get_bool('ItemOverlay', 'show_all_future_reqs', True))
-        self.chk_future_project.setChecked(self.cfg.get_bool('ItemOverlay', 'show_all_future_project_reqs', True))
+        self.item_font_size.setValue(self.cfg.get_item_font_size())
+        self.item_duration.setValue(int(self.cfg.get_item_duration() * 10))
+        self.chk_future_hideout.setChecked(self.cfg.get_show_future_hideout())
+        self.chk_future_project.setChecked(self.cfg.get_show_future_project())
         
-        self.chk_ultrawide.setChecked(self.cfg.get_bool('OCR', 'full_screen_scan', False))
-        self.chk_debug_save.setChecked(self.cfg.get_bool('OCR', 'save_debug_images', False))
+        self.chk_ultrawide.setChecked(self.cfg.get_full_screen_scan())
+        self.chk_debug_save.setChecked(self.cfg.get_save_debug_images())
 
         is_fresh_config = not self.cfg.parser.has_section('ItemOverlay')
-        saved_order = [x.strip() for x in self.cfg.get_str('ItemOverlay', 'section_order', "").split(',') if x.strip() in self.SECTIONS]
+        saved_order = [x.strip() for x in self.cfg.get_overlay_section_order().split(',') if x.strip() in self.SECTIONS]
         for k in self.DEFAULT_ORDER: 
             if k not in saved_order: saved_order.append(k)
         
@@ -408,10 +420,10 @@ class SettingsWindow(BasePage):
             self.overlay_order_list.addItem(item)
         if is_fresh_config: self._force_save_defaults(saved_order)
             
-        self.quest_font_size.setValue(self.cfg.get_int('QuestOverlay', 'font_size', 12))
-        self.quest_width.setValue(self.cfg.get_int('QuestOverlay', 'width', 350))
-        self.quest_opacity.setValue(self.cfg.get_int('QuestOverlay', 'opacity', 95))
-        self.quest_duration.setValue(int(self.cfg.get_float('QuestOverlay', 'duration_seconds', 5.0) * 10))
+        self.quest_font_size.setValue(self.cfg.get_quest_font_size())
+        self.quest_width.setValue(self.cfg.get_quest_width())
+        self.quest_opacity.setValue(self.cfg.get_quest_opacity())
+        self.quest_duration.setValue(int(self.cfg.get_quest_duration() * 10))
         self.update_preview()
 
     def _force_save_defaults(self, order_list):
@@ -422,24 +434,43 @@ class SettingsWindow(BasePage):
         self.cfg.save()
 
     def save_settings(self):
-        self.cfg.set('Hotkeys', 'price_check', self.hotkey_btn.current_key_string); self.cfg.set('Hotkeys', 'quest_log', self.quest_hotkey_btn.current_key_string)
+        self.cfg.set('Hotkeys', 'price_check', self.hotkey_btn.current_key_string); self.cfg.set('Hotkeys', 'quest_log', self.quest_hotkey_btn.current_key_string); self.cfg.set('Hotkeys', 'hub_hotkey', self.hub_hotkey_btn.current_key_string)
         display_name = self.lang_combo.currentText()
         if display_name in Constants.LANGUAGES:
-            lang_code = Constants.LANGUAGES[display_name][1]; self.cfg.set('General', 'language', lang_code); target = os.path.join(Constants.TESSDATA_DIR, f"{lang_code}.traineddata")
+            lang_code = Constants.LANGUAGES[display_name][1]; self.cfg.set_language(lang_code); target = os.path.join(Constants.TESSDATA_DIR, f"{lang_code}.traineddata")
             if lang_code != 'eng' and not os.path.exists(target): QMessageBox.information(self, "Download Required", f"Downloading language data for {display_name}..."); self.request_lang_download.emit(lang_code)
 
         color_str = f"{self.spin_r.value()}, {self.spin_g.value()}, {self.spin_b.value()}"
-        self.cfg.set('OCR', 'target_color', color_str)
-        self.cfg.set('OCR', 'full_screen_scan', self.chk_ultrawide.isChecked())
-        self.cfg.set('OCR', 'save_debug_images', self.chk_debug_save.isChecked())
+        self.cfg.set_ocr_color(color_str)
+        self.cfg.set_full_screen_scan(self.chk_ultrawide.isChecked())
+        self.cfg.set_save_debug_images(self.chk_debug_save.isChecked())
 
-        self.cfg.set('ItemOverlay', 'font_size', self.item_font_size.value()); self.cfg.set('ItemOverlay', 'duration_seconds', self.item_duration.value()/10.0); self.cfg.set('ItemOverlay', 'show_all_future_reqs', self.chk_future_hideout.isChecked()); self.cfg.set('ItemOverlay', 'show_all_future_project_reqs', self.chk_future_project.isChecked())
         new_order = []
-        for i in range(self.overlay_order_list.count()): item = self.overlay_order_list.item(i); key = item.data(Qt.ItemDataRole.UserRole); new_order.append(key); self.cfg.set('ItemOverlay', self.SECTIONS[key][1], item.checkState() == Qt.CheckState.Checked)
-        self.cfg.set('ItemOverlay', 'section_order', ",".join(new_order))
-        self.cfg.set('QuestOverlay', 'font_size', self.quest_font_size.value()); self.cfg.set('QuestOverlay', 'width', self.quest_width.value()); self.cfg.set('QuestOverlay', 'opacity', self.quest_opacity.value()); self.cfg.set('QuestOverlay', 'duration_seconds', self.quest_duration.value()/10.0)
+        section_states = {}
+        for i in range(self.overlay_order_list.count()): 
+            item = self.overlay_order_list.item(i)
+            key = item.data(Qt.ItemDataRole.UserRole)
+            new_order.append(key)
+            section_states[self.SECTIONS[key][1]] = (item.checkState() == Qt.CheckState.Checked)
+            
+        self.cfg.set_item_overlay_settings(
+            self.item_font_size.value(), 
+            self.item_duration.value()/10.0, 
+            self.chk_future_hideout.isChecked(), 
+            self.chk_future_project.isChecked(),
+            ",".join(new_order),
+            section_states
+        )
+        
+        self.cfg.set_quest_overlay_settings(
+            self.quest_font_size.value(), 
+            self.quest_width.value(), 
+            self.quest_opacity.value(), 
+            self.quest_duration.value()/10.0
+        )
+        
         self.cfg.save() 
-        if self.hotkey_btn.current_key_string != self.start_hotkey_price or self.quest_hotkey_btn.current_key_string != self.start_hotkey_quest: QMessageBox.information(self, "Restart Required", "Hotkeys updated. Please restart the app.")
+        if self.hotkey_btn.current_key_string != self.start_hotkey_price or self.quest_hotkey_btn.current_key_string != self.start_hotkey_quest or self.hub_hotkey_btn.current_key_string != self.start_hotkey_hub: QMessageBox.information(self, "Restart Required", "Hotkeys updated. Please restart the app.")
         if self.on_save_callback: self.on_save_callback()
         QMessageBox.information(self, "Saved", "Settings saved successfully.")
 

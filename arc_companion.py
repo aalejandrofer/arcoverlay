@@ -36,11 +36,13 @@ class Config:
 class HotkeyListener(QObject):
     item_check_triggered = pyqtSignal()
     quest_log_triggered = pyqtSignal()
+    hub_triggered = pyqtSignal()
     
-    def __init__(self, item_hotkey, quest_hotkey):
+    def __init__(self, item_hotkey, quest_hotkey, hub_hotkey):
         super().__init__()
         self.item_hotkey_str = self._convert_to_pynput_format(item_hotkey)
         self.quest_hotkey_str = self._convert_to_pynput_format(quest_hotkey)
+        self.hub_hotkey_str = self._convert_to_pynput_format(hub_hotkey)
         self.listener = None
 
     def _convert_to_pynput_format(self, hotkey_str):
@@ -53,8 +55,12 @@ class HotkeyListener(QObject):
         return '+'.join(formatted_parts)
 
     def run(self):
-        print(f"Hotkey listener started. Mapping: Item='{self.item_hotkey_str}', Quest='{self.quest_hotkey_str}'")
-        hotkeys = { self.item_hotkey_str: self._on_item_check, self.quest_hotkey_str: self._on_quest_log }
+        print(f"Hotkey listener started. Mapping: Item='{self.item_hotkey_str}', Quest='{self.quest_hotkey_str}', Hub='{self.hub_hotkey_str}'")
+        hotkeys = { 
+            self.item_hotkey_str: self._on_item_check, 
+            self.quest_hotkey_str: self._on_quest_log,
+            self.hub_hotkey_str: self._on_hub
+        }
         try:
             with pynput_keyboard.GlobalHotKeys(hotkeys) as self.listener: self.listener.join()
         except Exception as e: print(f"Error in Hotkey Listener: {e}")
@@ -64,6 +70,7 @@ class HotkeyListener(QObject):
 
     def _on_item_check(self): self.item_check_triggered.emit()
     def _on_quest_log(self): self.quest_log_triggered.emit()
+    def _on_hub(self): self.hub_triggered.emit()
 
 # --- SCAN WORKER (THREADING) ---
 class ScanWorker(QObject):
@@ -163,12 +170,14 @@ class ArcCompanionApp(QObject):
         self.tray.setContextMenu(menu)
 
     def _start_hotkey_service(self):
-        hotkey_item = self.config_manager.get_str('Hotkeys', 'price_check', 'ctrl+f')
-        hotkey_quest = self.config_manager.get_str('Hotkeys', 'quest_log', 'ctrl+e')
-        self.hotkey_worker = HotkeyListener(hotkey_item, hotkey_quest)
+        hotkey_item = self.config_manager.get_item_hotkey()
+        hotkey_quest = self.config_manager.get_quest_hotkey()
+        hotkey_hub = self.config_manager.get_hub_hotkey()
+        self.hotkey_worker = HotkeyListener(hotkey_item, hotkey_quest, hotkey_hub)
         self.hotkey_worker.moveToThread(self.hotkey_thread)
         self.hotkey_worker.item_check_triggered.connect(self.process_item_check)
         self.hotkey_worker.quest_log_triggered.connect(self.process_quest_log)
+        self.hotkey_worker.hub_triggered.connect(self.restore_app)
         self.hotkey_thread.started.connect(self.hotkey_worker.run)
         self.hotkey_thread.start()
 
@@ -179,18 +188,18 @@ class ArcCompanionApp(QObject):
     def reload_settings(self, is_initial_load=False):
         self.config_manager.load()
         try:
-            color_str = self.config_manager.get_str('OCR', 'target_color', "249,238,223")
+            color_str = self.config_manager.get_ocr_color()
             self.target_color = tuple(map(int, color_str.split(',')))
         except ValueError: self.target_color = (249, 238, 223)
             
-        self.ocr_lang_code = self.config_manager.get_str('General', 'language', 'eng')
+        self.ocr_lang_code = self.config_manager.get_language()
         self.json_lang_code = 'en'
         for _, (json_c, tess_c) in Constants.LANGUAGES.items():
             if tess_c == self.ocr_lang_code:
                 self.json_lang_code = json_c; break
         
-        full_screen = self.config_manager.get_bool('OCR', 'full_screen_scan', False)
-        save_debug = self.config_manager.get_bool('OCR', 'save_debug_images', False)
+        full_screen = self.config_manager.get_full_screen_scan()
+        save_debug = self.config_manager.get_save_debug_images()
 
         self.scanner.update_settings(self.target_color, self.ocr_lang_code, self.json_lang_code, full_screen_mode=full_screen, save_debug_images=save_debug)
         

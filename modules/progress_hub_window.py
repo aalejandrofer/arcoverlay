@@ -145,6 +145,26 @@ class ProgressHubWindow(QWidget):
         btn_layout.setSpacing(0) # Remove spacing
         main_layout.addLayout(btn_layout)
 
+        # --- RESTORE WINDOW STATE ---
+        # Geometry
+        x, y, w, h = self.config_manager.get_window_geometry()
+        
+        if x != -1 and y != -1:
+            self.setGeometry(x, y, w, h)
+        else:
+            self.resize(w, h)
+
+        # Banner State
+        banner_visible = self.config_manager.get_banner_visible()
+        if not banner_visible:
+            self.banner_container.hide()
+            self.toggle_banner_btn.setText("▲")
+            self.toggle_banner_btn.setToolTip("Show Banner")
+        else:
+            self.banner_container.show()
+            self.toggle_banner_btn.setText("▼")
+            self.toggle_banner_btn.setToolTip("Hide Banner")
+
         self.tabs = QTabWidget()
         main_layout.addWidget(self.tabs)
 
@@ -195,6 +215,11 @@ class ProgressHubWindow(QWidget):
             current_widget.reset_state()
 
     def closeEvent(self, event):
+        # Save Window State
+        self.config_manager.set_window_geometry(self.x(), self.y(), self.width(), self.height())
+        self.config_manager.set_banner_visible(self.banner_container.isVisible())
+        self.config_manager.save()
+
         # Force a final save on all tabs before closing
         for tab in [self.hideout_tab, self.quest_tab, self.project_tab, self.item_db_tab]:
             if hasattr(tab, 'save_state'): tab.save_state()

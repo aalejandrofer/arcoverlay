@@ -2,7 +2,40 @@ import configparser
 import os
 from .constants import Constants
 
+
 class ConfigManager:
+    DEFAULT_HOTKEY_PRICE = "ctrl+f"
+    DEFAULT_HOTKEY_QUEST = "ctrl+e"
+    DEFAULT_HOTKEY_HUB = "ctrl+h"
+    
+    # OCR Defaults
+    DEFAULT_OCR_COLOR = "249, 238, 223"
+    DEFAULT_FULL_SCREEN = False
+    DEFAULT_DEBUG_SAVE = False
+    
+    # General Defaults
+    DEFAULT_LANG = "eng"
+    
+    # Item Overlay Defaults
+    DEFAULT_ITEM_FONT = 12
+    DEFAULT_ITEM_DURATION = 3.0
+    DEFAULT_SHOW_FUTURE_HIDEOUT = True
+    DEFAULT_SHOW_FUTURE_PROJECT = True
+    DEFAULT_SECTION_ORDER = "price,storage,trader,notes,crafting,hideout,project,recycle,salvage"
+    
+    # Quest Overlay Defaults
+    DEFAULT_QUEST_FONT = 12
+    DEFAULT_QUEST_WIDTH = 350
+    DEFAULT_QUEST_OPACITY = 95
+    DEFAULT_QUEST_DURATION = 5.0
+    
+    # Window Defaults
+    DEFAULT_WIN_W = 760
+    DEFAULT_WIN_H = 850
+    DEFAULT_WIN_X = -1
+    DEFAULT_WIN_Y = -1
+    DEFAULT_BANNER_VISIBLE = True
+
     def __init__(self):
         self.path = Constants.CONFIG_FILE
         self.parser = configparser.ConfigParser()
@@ -36,3 +69,69 @@ class ConfigManager:
         if not self.parser.has_section(section):
             self.parser.add_section(section)
         self.parser.set(section, key, str(value))
+
+    def get_item_hotkey(self):
+        return self.get_str('Hotkeys', 'price_check', self.DEFAULT_HOTKEY_PRICE)
+
+    def get_quest_hotkey(self):
+        return self.get_str('Hotkeys', 'quest_log', self.DEFAULT_HOTKEY_QUEST)
+
+    def get_hub_hotkey(self):
+        return self.get_str('Hotkeys', 'hub_hotkey', self.DEFAULT_HOTKEY_HUB)
+
+    # --- OCR ---
+    def get_ocr_color(self): return self.get_str('OCR', 'target_color', self.DEFAULT_OCR_COLOR)
+    def set_ocr_color(self, val): self.set('OCR', 'target_color', val)
+    
+    def get_full_screen_scan(self): return self.get_bool('OCR', 'full_screen_scan', self.DEFAULT_FULL_SCREEN)
+    def set_full_screen_scan(self, val): self.set('OCR', 'full_screen_scan', val)
+    
+    def get_save_debug_images(self): return self.get_bool('OCR', 'save_debug_images', self.DEFAULT_DEBUG_SAVE)
+    def set_save_debug_images(self, val): self.set('OCR', 'save_debug_images', val)
+
+    # --- GENERAL ---
+    def get_language(self): return self.get_str('General', 'language', self.DEFAULT_LANG)
+    def set_language(self, val): self.set('General', 'language', val)
+
+    # --- ITEM OVERLAY ---
+    def get_item_font_size(self): return self.get_int('ItemOverlay', 'font_size', self.DEFAULT_ITEM_FONT)
+    def get_item_duration(self): return self.get_float('ItemOverlay', 'duration_seconds', self.DEFAULT_ITEM_DURATION)
+    def get_show_future_hideout(self): return self.get_bool('ItemOverlay', 'show_all_future_reqs', self.DEFAULT_SHOW_FUTURE_HIDEOUT)
+    def get_show_future_project(self): return self.get_bool('ItemOverlay', 'show_all_future_project_reqs', self.DEFAULT_SHOW_FUTURE_PROJECT)
+    def get_overlay_section_order(self): return self.get_str('ItemOverlay', 'section_order', self.DEFAULT_SECTION_ORDER)
+    
+    def set_item_overlay_settings(self, font_size, duration, show_hideout, show_project, order_str, section_states):
+        self.set('ItemOverlay', 'font_size', font_size)
+        self.set('ItemOverlay', 'duration_seconds', duration)
+        self.set('ItemOverlay', 'show_all_future_reqs', show_hideout)
+        self.set('ItemOverlay', 'show_all_future_project_reqs', show_project)
+        self.set('ItemOverlay', 'section_order', order_str)
+        for k, v in section_states.items(): self.set('ItemOverlay', k, v)
+
+    # --- QUEST OVERLAY ---
+    def get_quest_font_size(self): return self.get_int('QuestOverlay', 'font_size', self.DEFAULT_QUEST_FONT)
+    def get_quest_width(self): return self.get_int('QuestOverlay', 'width', self.DEFAULT_QUEST_WIDTH)
+    def get_quest_opacity(self): return self.get_int('QuestOverlay', 'opacity', self.DEFAULT_QUEST_OPACITY)
+    def get_quest_duration(self): return self.get_float('QuestOverlay', 'duration_seconds', self.DEFAULT_QUEST_DURATION)
+    
+    def set_quest_overlay_settings(self, font_size, width, opacity, duration):
+        self.set('QuestOverlay', 'font_size', font_size)
+        self.set('QuestOverlay', 'width', width)
+        self.set('QuestOverlay', 'opacity', opacity)
+        self.set('QuestOverlay', 'duration_seconds', duration)
+
+    # --- WINDOW STATE ---
+    def get_window_geometry(self):
+        return (
+            self.get_int('Window', 'x', self.DEFAULT_WIN_X),
+            self.get_int('Window', 'y', self.DEFAULT_WIN_Y),
+            self.get_int('Window', 'width', self.DEFAULT_WIN_W),
+            self.get_int('Window', 'height', self.DEFAULT_WIN_H)
+        )
+    
+    def set_window_geometry(self, x, y, w, h):
+        self.set('Window', 'x', x); self.set('Window', 'y', y)
+        self.set('Window', 'width', w); self.set('Window', 'height', h)
+
+    def get_banner_visible(self): return self.get_bool('Window', 'banner_visible', self.DEFAULT_BANNER_VISIBLE)
+    def set_banner_visible(self, val): self.set('Window', 'banner_visible', val)
