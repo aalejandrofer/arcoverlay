@@ -1,7 +1,6 @@
 from PyQt6.QtWidgets import (QLabel, QPushButton, QFrame, QCheckBox, QMessageBox, QWidget, QVBoxLayout, QHBoxLayout, QSizePolicy)
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QPainter, QColor, QFont
-import json
 from .constants import Constants
 from .ui_components import InventoryControl, TextProgressBar
 from .base_page import BasePage
@@ -107,16 +106,18 @@ class CategoryValueControl(QWidget):
 
 
 class ProjectManagerWindow(BasePage):
-    def __init__(self, project_data, user_progress, item_finder, rarity_colors, lang_code="en"):
+    def __init__(self, project_data, user_progress, data_manager, rarity_colors, lang_code="en"):
         super().__init__("Expeditions Manager")
-        self.item_finder = item_finder
+        self.data_manager = data_manager
         self.rarity_colors = rarity_colors
         self.project_data = project_data
-        self.user_progress = user_progress
+        self.project_data = project_data
         self.lang_code = lang_code 
 
-        if 'projects' not in self.user_progress:
-            self.user_progress['projects'] = {}
+        # self.user_progress is now accessed directly via self.data_manager.user_progress
+        
+        if 'projects' not in self.data_manager.user_progress:
+            self.data_manager.user_progress['projects'] = {}
         
         self.inventory_widgets = {} 
         self.category_widgets = {}  # For category value tracking
@@ -139,7 +140,7 @@ class ProjectManagerWindow(BasePage):
             p_layout.setContentsMargins(8, 8, 8, 8) 
             self.content_layout.addWidget(p_frame)
             
-            p_name = self.item_finder.get_localized_name(project, self.lang_code)
+            p_name = self.data_manager.get_localized_name(project, self.lang_code)
             p_layout.addWidget(QLabel(p_name, objectName="Header"))
             
             for phase_info in sorted(project.get('phases', []), key=lambda x: x.get('phase', 0)):
@@ -195,18 +196,19 @@ class ProjectManagerWindow(BasePage):
                 if item_reqs:
                     for req in item_reqs:
                         item_id, qty = req.get('itemId'), req.get('quantity', 0)
-                        item_name = self.item_finder.get_localized_name(item_id, self.lang_code)
-                        saved = self.user_progress.get('projects', {}).get(p_id, {}).get('inventory', {}).get(str(phase_num), {}).get(item_id, 0)
+                        item_name = self.data_manager.get_localized_name(item_id, self.lang_code)
+                        saved = self.data_manager.user_progress.get('projects', {}).get(p_id, {}).get('inventory', {}).get(str(phase_num), {}).get(item_id, 0)
                         
                         row = QHBoxLayout()
-                        item_obj = self.item_finder.id_to_item_map.get(item_id)
+                        item_obj = self.data_manager.id_to_item_map.get(item_id)
                         rarity = item_obj.get('rarity', 'Common') if item_obj else 'Common'
                         color = self.rarity_colors.get(rarity, "#E0E0E0")
                         
                         lbl = QLabel(item_name)
                         lbl.setStyleSheet(f"color: {color}; border: none;")
                         ctrl = InventoryControl(saved, qty, show_extra_buttons=True)
-                        ctrl.value_changed.connect(self.start_save_timer)
+                        # Connect to sync method that updates user_progress immediately
+                        ctrl.value_changed.connect(lambda pid=p_id, pn=phase_num, iid=item_id: self._on_inventory_changed(pid, pn, iid))
                         self.inventory_widgets[(p_id, phase_num, item_id)] = ctrl
                         
                         row.addWidget(lbl)
@@ -219,7 +221,7 @@ class ProjectManagerWindow(BasePage):
                     for cat_req in category_reqs:
                         category_name = cat_req.get('category', '')
                         value_required = cat_req.get('valueRequired', 0)
-                        saved_value = self.user_progress.get('projects', {}).get(p_id, {}).get('categories', {}).get(str(phase_num), {}).get(category_name, 0)
+                        saved_value = self.data_manager.user_progress.get('projects', {}).get(p_id, {}).get('categories', {}).get(str(phase_num), {}).get(category_name, 0)
                         
                         row = QHBoxLayout()
                         
@@ -232,7 +234,8 @@ class ProjectManagerWindow(BasePage):
                         
                         # Category value control - now consistent with InventoryControl
                         ctrl = CategoryValueControl(saved_value, value_required)
-                        ctrl.value_changed.connect(self.start_save_timer)
+                        # Connect to sync method that updates user_progress immediately
+                        ctrl.value_changed.connect(lambda pid=p_id, pn=phase_num, cn=category_name: self._on_category_changed(pid, pn, cn))
                         self.category_widgets[(p_id, phase_num, category_name)] = ctrl
                         
                         row.addWidget(ctrl)
@@ -241,10 +244,40 @@ class ProjectManagerWindow(BasePage):
                 wrapper.setProperty("btn_complete", btn_complete)
         self.refresh_visibility()
 
+    def _on_inventory_changed(self, p_id, phase_num, item_id):
+        """Called when an inventory control value changes - syncs to user_progress immediately."""
+        widget = self.inventory_widgets.get((p_id, phase_num, item_id))
+        if widget:
+            val = widget.get_value()
+            # Update user_progress immediately so overlay shows current values
+            inv_dict = self.data_manager.user_progress.setdefault('projects', {}).setdefault(p_id, {}).setdefault('inventory', {})
+            phase_dict = inv_dict.setdefault(str(phase_num), {})
+            if val > 0:
+                phase_dict[item_id] = val
+            elif item_id in phase_dict:
+                del phase_dict[item_id]
+        # Start save timer to persist to disk
+        self.start_save_timer()
+
+    def _on_category_changed(self, p_id, phase_num, category_name):
+        """Called when a category control value changes - syncs to user_progress immediately."""
+        widget = self.category_widgets.get((p_id, phase_num, category_name))
+        if widget:
+            val = widget.get_value()
+            # Update user_progress immediately so overlay shows current values
+            cat_dict = self.data_manager.user_progress.setdefault('projects', {}).setdefault(p_id, {}).setdefault('categories', {})
+            phase_dict = cat_dict.setdefault(str(phase_num), {})
+            if val > 0:
+                phase_dict[category_name] = val
+            elif category_name in phase_dict:
+                del phase_dict[category_name]
+        # Start save timer to persist to disk
+        self.start_save_timer()
+
     def refresh_visibility(self):
         show_completed = self.chk_show_completed.isChecked()
         for (p_id, p_num), wrapper in self.phase_frames.items():
-            progress = self.user_progress.get('projects', {}).get(p_id, {'completed_phase': 0})
+            progress = self.data_manager.user_progress.get('projects', {}).get(p_id, {'completed_phase': 0})
             completed_phase = progress.get('completed_phase', 0)
             is_completed = p_num <= completed_phase
             is_next = p_num == completed_phase + 1
@@ -266,7 +299,7 @@ class ProjectManagerWindow(BasePage):
             btn.style().polish(btn)
 
     def toggle_phase_completion(self, p_id, p_num):
-        progress = self.user_progress['projects'].setdefault(p_id, {'completed_phase': 0, 'inventory': {}, 'categories': {}})
+        progress = self.data_manager.user_progress['projects'].setdefault(p_id, {'completed_phase': 0, 'inventory': {}, 'categories': {}})
         curr = progress.get('completed_phase', 0)
         if p_num <= curr:
             progress['completed_phase'] = p_num - 1
@@ -287,7 +320,7 @@ class ProjectManagerWindow(BasePage):
 
     # --- BASE PAGE OVERRIDES ---
     def reset_state(self):
-        self.user_progress['projects'] = {}
+        self.data_manager.user_progress['projects'] = {}
         for ctrl in self.inventory_widgets.values():
             ctrl.value = 0
             ctrl.change(0) 
@@ -297,9 +330,9 @@ class ProjectManagerWindow(BasePage):
         self.refresh_visibility()
 
     def save_state(self):
-        # Save item-based inventory
+        # Sync all current widget values to user_progress (in case any were missed)
         for (p_id, p_num, item_id), widget in self.inventory_widgets.items():
-             inv_dict = self.user_progress.setdefault('projects', {}).setdefault(p_id, {}).setdefault('inventory', {})
+             inv_dict = self.data_manager.user_progress.setdefault('projects', {}).setdefault(p_id, {}).setdefault('inventory', {})
              phase_dict = inv_dict.setdefault(str(p_num), {})
              val = widget.get_value()
              if val > 0:
@@ -309,7 +342,7 @@ class ProjectManagerWindow(BasePage):
         
         # Save category values
         for (p_id, p_num, category_name), widget in self.category_widgets.items():
-            cat_dict = self.user_progress.setdefault('projects', {}).setdefault(p_id, {}).setdefault('categories', {})
+            cat_dict = self.data_manager.user_progress.setdefault('projects', {}).setdefault(p_id, {}).setdefault('categories', {})
             phase_dict = cat_dict.setdefault(str(p_num), {})
             val = widget.get_value()
             if val > 0:
@@ -317,8 +350,5 @@ class ProjectManagerWindow(BasePage):
             elif category_name in phase_dict:
                 del phase_dict[category_name]
         
-        try:
-            with open(Constants.PROGRESS_FILE, 'w', encoding='utf-8') as f:
-                json.dump(self.user_progress, f, indent=2)
-        except Exception as e:
-            print(f"Error saving project progress: {e}")
+        # Use DataManager's save method to preserve all progress data (including item_notes)
+        self.data_manager.save_user_progress()

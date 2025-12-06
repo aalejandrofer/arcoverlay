@@ -233,13 +233,35 @@ class ItemOverlayUI:
             nonlocal has_content
             if not user_settings.getboolean('ItemOverlay', 'show_hideout_reqs', fallback=True): return
             show_future = user_settings.getboolean('ItemOverlay', 'show_all_future_reqs', fallback=False)
-            filtered_reqs = [r for r in hideout_reqs if r[1] == 'next' or show_future] if hideout_reqs else []
+            
+            # Handle both old format (2-tuple) and new format (4-tuple)
+            filtered_reqs = []
+            if hideout_reqs:
+                for req in hideout_reqs:
+                    if len(req) >= 4:
+                        # New format: (display_str, req_type, is_complete, needed_qty)
+                        req_str, req_type, is_complete, needed_qty = req[0], req[1], req[2], req[3]
+                        if req_type == 'next' or show_future:
+                            filtered_reqs.append((req_str, req_type, is_complete, needed_qty))
+                    else:
+                        # Old format: (display_str, req_type) - for backwards compatibility
+                        req_str, req_type = req[0], req[1]
+                        if req_type == 'next' or show_future:
+                            filtered_reqs.append((req_str, req_type, False, 0))
+            
             if filtered_reqs:
                 if has_content: overlay.add_separator()
                 overlay.add_label("Hideout Upgrade:", font_size - 1, True, "#5C6370")
-                for req_str, req_type in filtered_reqs:
-                    color = "#98C379" if req_type == 'next' else "#D19A66" 
-                    overlay.add_label(f"■ {req_str}", font_size, False, color, 10)
+                for req_data in filtered_reqs:
+                    req_str, req_type, is_complete, needed_qty = req_data
+                    if is_complete:
+                        # Show with green tick for completed requirements
+                        color = "#4CAF50"  # Green
+                        display_text = f"■ {req_str} <span style='color:#4CAF50'>✓</span>"
+                    else:
+                        color = "#98C379" if req_type == 'next' else "#D19A66" 
+                        display_text = f"■ {req_str}"
+                    overlay.add_label(display_text, font_size, False, color, 10)
                 has_content = True
 
         def render_project():

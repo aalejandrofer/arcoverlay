@@ -1,6 +1,5 @@
 from PyQt6.QtWidgets import (QLabel, QPushButton, QFrame, QCheckBox, QMessageBox, QVBoxLayout, QHBoxLayout, QLineEdit, QComboBox)
 from PyQt6.QtCore import Qt
-import json
 from .constants import Constants
 from .base_page import BasePage
 
@@ -9,18 +8,18 @@ class QuestManagerWindow(BasePage):
         super().__init__("Quest Manager")
         
         self.data_manager = data_manager
-        self.user_progress = user_progress
+        # self.user_progress is now accessed directly via self.data_manager.user_progress
         self.lang_code = lang_code 
 
-        if 'quests' not in self.user_progress:
-            self.user_progress['quests'] = {}
+        if 'quests' not in self.data_manager.user_progress:
+            self.data_manager.user_progress['quests'] = {}
         
         self.quest_widgets = {} 
         self.all_quests_data = self.data_manager.get_filtered_quests(lang_code=self.lang_code) 
         self.quest_data_map = {q.get('id'): q for q in self.all_quests_data}
         
         all_quest_ids = [q.get('id') for q in self.all_quests_data]
-        self.quest_order = self.user_progress.get('quest_order', all_quest_ids)
+        self.quest_order = self.data_manager.user_progress.get('quest_order', all_quest_ids)
         for q_id in all_quest_ids:
             if q_id not in self.quest_order: self.quest_order.append(q_id)
         
@@ -51,7 +50,7 @@ class QuestManagerWindow(BasePage):
             q_id = quest.get('id')
             if not q_id: continue
             
-            current_prog = self.user_progress['quests'].get(q_id, {})
+            current_prog = self.data_manager.user_progress['quests'].get(q_id, {})
             is_tracked_saved = current_prog.get('is_tracked', False)
             completed_objs_saved = current_prog.get('objectives_completed', [])
 
@@ -108,11 +107,11 @@ class QuestManagerWindow(BasePage):
 
     def rebuild_and_refresh_ui(self, _=None):
         for qid, widgets in self.quest_widgets.items():
-            prog = self.user_progress['quests'].setdefault(qid, {})
+            prog = self.data_manager.user_progress['quests'].setdefault(qid, {})
             prog['is_tracked'] = widgets['track_chk'].isChecked()
             
         def sort_key(q_id):
-            prog = self.user_progress['quests'].get(q_id, {})
+            prog = self.data_manager.user_progress['quests'].get(q_id, {})
             is_tracked = prog.get('is_tracked', False)
             is_completed = prog.get('quest_completed', False)
             order_index = self.quest_order.index(q_id) if q_id in self.quest_order else 999
@@ -136,7 +135,7 @@ class QuestManagerWindow(BasePage):
         
         for i, q_id in enumerate(sorted_quest_ids):
             widgets = self.quest_widgets[q_id]
-            prog = self.user_progress['quests'].get(q_id, {})
+            prog = self.data_manager.user_progress['quests'].get(q_id, {})
             is_complete = prog.get('quest_completed', False)
             is_tracked = prog.get('is_tracked', False)
             
@@ -186,7 +185,7 @@ class QuestManagerWindow(BasePage):
             widgets['btn_down'].setEnabled(not (q_id == visible_tracked_ids[-1]))
 
     def move_quest(self, quest_id, direction):
-        tracked_quests = [q for q in self.quest_order if self.user_progress['quests'].get(q, {}).get('is_tracked', False)]
+        tracked_quests = [q for q in self.quest_order if self.data_manager.user_progress['quests'].get(q, {}).get('is_tracked', False)]
         if quest_id not in tracked_quests: return
         try: current_tracked_index = tracked_quests.index(quest_id)
         except ValueError: return
@@ -198,7 +197,7 @@ class QuestManagerWindow(BasePage):
             self.rebuild_and_refresh_ui(); self.start_save_timer()
 
     def toggle_done(self, q_id):
-        prog = self.user_progress['quests'].setdefault(q_id, {})
+        prog = self.data_manager.user_progress['quests'].setdefault(q_id, {})
         current_status = prog.get('quest_completed', False)
         prog['quest_completed'] = not current_status
         if prog['quest_completed']:
@@ -216,20 +215,20 @@ class QuestManagerWindow(BasePage):
 
     # --- BASE PAGE OVERRIDES ---
     def reset_state(self):
-        self.user_progress['quests'] = {}
+        self.data_manager.user_progress['quests'] = {}
         self.quest_order = [q.get('id') for q in self.all_quests_data]
-        self.user_progress['quest_order'] = self.quest_order
+        self.data_manager.user_progress['quest_order'] = self.quest_order
         for qid, widgets in self.quest_widgets.items():
             widgets['track_chk'].setChecked(False)
             for obj in widgets['objs']: obj['checkbox'].setChecked(False)
         self.start_save_timer(); self.rebuild_and_refresh_ui()
 
     def save_state(self):
-        self.user_progress['quest_order'] = self.quest_order
+        self.data_manager.user_progress['quest_order'] = self.quest_order
         for q_id, widgets in self.quest_widgets.items():
-            prog = self.user_progress['quests'].setdefault(q_id, {})
+            prog = self.data_manager.user_progress['quests'].setdefault(q_id, {})
             prog['is_tracked'] = widgets['track_chk'].isChecked()
             prog['objectives_completed'] = [obj['text'] for obj in widgets['objs'] if obj['checkbox'].isChecked()]
-        try:
-            with open(Constants.PROGRESS_FILE, 'w', encoding='utf-8') as f: json.dump(self.user_progress, f, indent=2)
-        except Exception as e: print(f"Error saving quest progress: {e}")
+        
+        # Use DataManager's save method to preserve all progress data (including item_notes)
+        self.data_manager.save_user_progress()

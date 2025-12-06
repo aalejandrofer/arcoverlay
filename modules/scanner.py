@@ -236,6 +236,15 @@ class ItemScanner:
             if self.cmd_config.debug:
                 print(f"[DEBUG] Tooltip too small to crop, using full height")
         # ----------------------------------------------
+        
+        # --- FIX: Trim edges to remove artifacts from screen boundaries ---
+        # When tooltips are near screen edges, we sometimes capture gray bars or
+        # UI elements that corrupt the OCR. Trim a few pixels from all edges.
+        w, h = img.size
+        edge_trim = 10 if w > 100 else 5  # Smaller trim for narrow images
+        if w > edge_trim * 2 and h > edge_trim * 2:
+            img = img.crop((edge_trim, 0, w - edge_trim, h))  # Trim left and right edges
+        # -----------------------------------------------------------------
 
         # 3. Enhance Image for OCR
         img = img.convert('L') # Convert to Grayscale

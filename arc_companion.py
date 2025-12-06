@@ -129,7 +129,8 @@ class ArcCompanionApp(QObject):
             lambda: self.check_for_app_updates(manual=True),
             lang_code=self.json_lang_code 
         )
-        self.progress_hub.progress_saved.connect(self.data_manager.reload_progress)
+        # NOTE: Do NOT connect to reload_progress here - it creates a new dict object
+        # which breaks references held by manager windows. The in-memory data is already correct.
         
         self.progress_hub.settings_tab.request_data_update.connect(self.run_manual_data_check)
         self.progress_hub.settings_tab.request_lang_download.connect(self.run_lang_download)
@@ -323,7 +324,7 @@ class ArcCompanionApp(QObject):
         self.scanner = ItemScanner(self.cmd_config, self.data_manager)
         self.progress_hub.cleanup()
         self.progress_hub = ProgressHubWindow(self.data_manager, self.config_manager, self.reload_settings, APP_VERSION, lambda: self.check_for_app_updates(manual=True), lang_code=self.json_lang_code)
-        self.progress_hub.progress_saved.connect(self.data_manager.reload_progress)
+        # NOTE: Do NOT connect to reload_progress - see comment in __init__
         self._build_tray_menu()
 
     def check_for_app_updates(self, manual=False):
@@ -331,7 +332,7 @@ class ArcCompanionApp(QObject):
             try:
                 if self.app_update_thread.isRunning():
                      if manual:
-                         QMessageBox.information(None, "Check in Progress", "An update check is already in progress.")
+                         QMessageBox.information(self.progress_hub, "Check in Progress", "An update check is already in progress.")
                      return
             except RuntimeError:
                 self.app_update_thread = None
@@ -340,10 +341,10 @@ class ArcCompanionApp(QObject):
         self.app_update_worker = AppUpdateChecker(APP_VERSION, APP_UPDATE_URL)
         self.app_update_worker.moveToThread(self.app_update_thread)
         self.app_update_thread.started.connect(self.app_update_worker.run_check)
-        self.app_update_worker.update_available.connect(lambda v, u: QMessageBox.question(None, "Update", f"New version {v} available. Open site?", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No) == QMessageBox.StandardButton.Yes and QDesktopServices.openUrl(QUrl(u)))
+        self.app_update_worker.update_available.connect(lambda v, u: QMessageBox.question(self.progress_hub, "Update", f"New version {v} available. Open site?", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No) == QMessageBox.StandardButton.Yes and QDesktopServices.openUrl(QUrl(u)))
         self.app_update_worker.check_finished.connect(self.app_update_thread.quit)
         self.app_update_thread.finished.connect(self.app_update_thread.deleteLater)
-        if manual: self.app_update_worker.check_finished.connect(lambda: QMessageBox.information(None, "Up to Date", f"Version {APP_VERSION} is the latest."))
+        if manual: self.app_update_worker.check_finished.connect(lambda: QMessageBox.information(self.progress_hub, "Up to Date", f"Version {APP_VERSION} is the latest."))
         self.app_update_thread.start()
 
         

@@ -179,6 +179,14 @@ class DataManager:
         return self.item_to_trades_map.get(item['id'], []) if item and 'id' in item else []
     
     def find_hideout_requirements(self, item_name: str, lang_code='en'):
+        """
+        Find hideout upgrade requirements for an item.
+        Returns list of tuples: (display_string, req_type, is_complete, needed_qty)
+        - display_string: formatted requirement text
+        - req_type: 'next' or 'future' 
+        - is_complete: True if user has enough items for this requirement
+        - needed_qty: quantity needed for the requirement
+        """
         results, target_item = [], self.get_item_by_name(item_name)
         if not target_item or 'id' not in target_item: return []
         tid = target_item['id']
@@ -193,11 +201,20 @@ class DataManager:
                 req_type = 'next' if lvl == cur_lvl + 1 else 'future'
                 for req in lvl_info.get('requirementItemIds', []):
                     if req.get('itemId') == tid:
-                        needed, owned = req.get('quantity', 0), h_inv.get(sid, {}).get(str(lvl), {}).get(req.get('itemId'), 0)
-                        if (rem := needed - owned) > 0: results.append((f"{sname} (Lvl {lvl}): x{rem}", req_type))
+                        needed = req.get('quantity', 0)
+                        owned = h_inv.get(sid, {}).get(str(lvl), {}).get(req.get('itemId'), 0)
+                        is_complete = owned >= needed
+                        # Show remaining if not complete, otherwise show total needed with tick
+                        if is_complete:
+                            display_str = f"{sname} (Lvl {lvl}): x{needed}"
+                        else:
+                            remaining = needed - owned
+                            display_str = f"{sname} (Lvl {lvl}): x{remaining}"
+                        results.append((display_str, req_type, is_complete, needed))
         return results
 
     def find_project_requirements(self, item_name: str, lang_code='en'):
+        """Find project/expedition requirements for an item. Returns list of (display_string, req_type) tuples."""
         results, target_item = [], self.get_item_by_name(item_name)
         if not target_item or 'id' not in target_item: return []
         tid = target_item['id']
