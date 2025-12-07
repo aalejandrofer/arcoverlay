@@ -288,11 +288,26 @@ class Constants:
         font-size: 13px;
     }
 
-    QMessageBox {
-        background-color: #2B303B;
-    }
     QMessageBox QLabel {
         color: #E0E6ED;
+    }
+
+    QMenu {
+        background-color: #2B303B;
+        border: 1px solid #333;
+    }
+    QMenu::item {
+        padding: 5px 20px 5px 20px;
+        color: #E0E6ED;
+    }
+    QMenu::item:selected {
+        background-color: #3E4451;
+        color: white;
+    }
+    QMenu::separator {
+        height: 1px;
+        background: #333;
+        margin: 5px 0px;
     }
     """
 

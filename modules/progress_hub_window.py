@@ -9,7 +9,7 @@ from .quest_manager_window import QuestManagerWindow
 from .project_manager_window import ProjectManagerWindow
 from .item_database_window import ItemDatabaseWindow
 from .settings_window import SettingsWindow
-from .ui_components import ClickableBanner
+from .ui_components import ClickableBanner, set_dark_title_bar
 
 class AboutTab(QWidget):
     def __init__(self, app_version, check_update_func=None):
@@ -90,6 +90,9 @@ class ProgressHubWindow(QWidget):
         self.data_manager = data_manager
         self.config_manager = config_manager
         self.lang_code = lang_code 
+        
+        # Apply dark title bar
+        set_dark_title_bar(self)
 
         self.setWindowTitle("Arc Companion - Progress Hub")
         self.resize(760, 850) 

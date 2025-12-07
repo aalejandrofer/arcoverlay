@@ -15,7 +15,7 @@
     "zh-TW": "損壞的蜱蟲莢",
     "uk": "Пошкоджена капсула кліща",
     "zh-CN": "损坏的蜱虫荚",
-    "kr": "손상된 진드기 포드",
+    "kr": "손상된 틱 포드",
     "tr": "Hasarlı Kene Kapsülü",
     "hr": "Oštećena Mahuna Krpelja",
     "sr": "Oštećena Mahuna Krpelja"
@@ -43,12 +43,15 @@
   "type": "Recyclable",
   "rarity": "Common",
   "value": 270,
-  "weightKg": 0.25,
+  "recyclesInto": {
+    "arc_alloy": 1
+  },
+  "salvagesInto": {
+    "metal_parts": 1
+  },
+  "weightKg": 0.083,
   "stackSize": 3,
   "foundIn": "ARC",
   "imageFilename": "https://cdn.arctracker.io/items/damaged_tick_pod.png",
-  "updatedAt": "11/20/2025",
-  "recyclesInto": {
-    "arc_alloy": 1
-  }
+  "updatedAt": "12/07/2025"
 }

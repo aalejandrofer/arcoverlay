@@ -142,7 +142,7 @@
       "zh-TW": "ARC護甲穿透",
       "uk": "Пробиття броні ARC",
       "zh-CN": "ARC护甲穿透",
-      "kr": "ARC 방어구 관통",
+      "kr": "아크 방어구 관통",
       "tr": "ARC Zırh Delme",
       "hr": "ARC Probijanje Oklopa",
       "sr": "ARC Probijanje Oklopa",
@@ -161,7 +161,8 @@
   },
   "craftBench": "weapon_bench",
   "stationLevelRequired": 3,
+  "blueprintLocked": true,
   "imageFilename": "https://cdn.arctracker.io/items/tempest.png",
-  "updatedAt": "11/11/2025",
+  "updatedAt": "12/7/2025",
   "isWeapon": true
 }

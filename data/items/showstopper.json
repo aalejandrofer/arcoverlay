@@ -61,7 +61,7 @@
       "zh-TW": "ARC暈眩持續時間",
       "uk": "Тривалість оглушення ARC",
       "zh-CN": "ARC晕眩持续时间",
-      "kr": "ARC 기절 지속시간",
+      "kr": "아크 기절 지속시간",
       "tr": "ARC Sersemletme Süresi",
       "hr": "Trajanje ARC Omamljivanja",
       "sr": "Trajanje ARC Omamljivanja",
@@ -116,9 +116,11 @@
     "electrical_components": 1,
     "battery": 2
   },
-  "craftBench": "explosives_bench",
   "recipe": {
     "advanced_electrical_components": 1,
     "voltage_converter": 1
-  }
+  },
+  "craftBench": "explosives_bench",
+  "stationLevelRequired": 3,
+  "blueprintLocked": true
 }

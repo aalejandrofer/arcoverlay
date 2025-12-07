@@ -15,7 +15,7 @@
     "zh-TW": "爆炸化合物",
     "uk": "Вибухова речовина",
     "zh-CN": "爆炸化合物",
-    "kr": "폭발 화합물",
+    "kr": "혼합 화약",
     "tr": "Patlayıcı Bileşik",
     "hr": "Eksplozivna smjesa",
     "sr": "Eksplozivna smesa"
@@ -47,12 +47,15 @@
   "stackSize": 5,
   "foundIn": "Industrial, Security",
   "imageFilename": "https://cdn.arctracker.io/items/explosive_compound.png",
-  "updatedAt": "11/20/2025",
+  "updatedAt": "12/07/2025",
   "recipe": {
     "crude_explosives": 2,
     "oil": 2
   },
   "recyclesInto": {
+    "crude_explosives": 2
+  },
+  "salvagesInto": {
     "crude_explosives": 1
   },
   "craftBench": "refiner"

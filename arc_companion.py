@@ -416,6 +416,7 @@ def main():
 
     try:
         app_instance = QApplication(sys.argv)
+        app_instance.setStyleSheet(Constants.DARK_THEME_QSS)
         if os.path.exists(Constants.ICON_FILE): app_instance.setWindowIcon(QIcon(Constants.ICON_FILE))
         shared_memory = QSharedMemory("ArcCompanion_Unique_Instance_Lock")
         if not shared_memory.create(1): QMessageBox.warning(None, "Already Running", "Arc Companion is already running."); sys.exit(0)

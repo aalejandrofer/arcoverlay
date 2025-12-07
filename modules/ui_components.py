@@ -8,6 +8,20 @@ from PyQt6.QtGui import (
     QDesktopServices, QPixmap
 )
 import os
+import ctypes
+
+def set_dark_title_bar(window: QWidget):
+    """
+    Applies the Windows DWM immersive dark mode attribute to a window's title bar.
+    Safe to call on non-Windows systems (will just do nothing).
+    """
+    try:
+        # DWMWA_USE_IMMERSIVE_DARK_MODE = 20
+        hwnd = int(window.winId())
+        value = ctypes.c_int(1)
+        ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 20, ctypes.byref(value), 4)
+    except Exception:
+        pass
 
 # =============================================================================
 # HEADER COMPONENT (New)

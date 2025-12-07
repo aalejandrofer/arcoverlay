@@ -15,7 +15,7 @@
     "zh-TW": "勘測者保險庫",
     "uk": "Сховище геодезиста",
     "zh-CN": "勘测者保险库",
-    "kr": "측량사 금고",
+    "kr": "서베이어 볼트",
     "tr": "Araştırmacı Kasası",
     "hr": "Trezor istraživača",
     "sr": "Trezor istraživača"
@@ -54,5 +54,5 @@
   "weightKg": 1,
   "stackSize": 3,
   "imageFilename": "https://cdn.arctracker.io/items/surveyor_vault.png",
-  "updatedAt": "11/23/2025"
+  "updatedAt": "12/07/2025"
 }
