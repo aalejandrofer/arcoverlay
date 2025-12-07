@@ -103,6 +103,7 @@ class CategoryValueControl(QWidget):
         self.current_value = value
         self.pbar.setValue(self.current_value)
         self._update_style()
+        self.value_changed.emit()
 
 
 class ProjectManagerWindow(BasePage):
@@ -308,8 +309,8 @@ class ProjectManagerWindow(BasePage):
         self.start_save_timer()
         self.refresh_visibility()
 
-    def reset_project_progress_confirmation(self):
-        msg = QMessageBox()
+    def confirm_reset(self):
+        msg = QMessageBox(self)
         msg.setWindowTitle("Confirm Reset")
         msg.setText("Are you sure you want to completely reset ALL Expedition progress?")
         msg.setIcon(QMessageBox.Icon.Warning)
@@ -322,8 +323,7 @@ class ProjectManagerWindow(BasePage):
     def reset_state(self):
         self.data_manager.user_progress['projects'] = {}
         for ctrl in self.inventory_widgets.values():
-            ctrl.value = 0
-            ctrl.change(0) 
+            ctrl.set_value(0) 
         for ctrl in self.category_widgets.values():
             ctrl.set_value(0)
         self.start_save_timer()

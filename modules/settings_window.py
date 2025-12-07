@@ -2,11 +2,13 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
     QSlider, QPushButton, QComboBox, QStackedWidget, QFrame, 
     QGraphicsDropShadowEffect, QMessageBox, QTabWidget, QListWidget, QListWidgetItem,
-    QAbstractItemView, QSpinBox, QAbstractSpinBox, QApplication
+    QAbstractItemView, QSpinBox, QAbstractSpinBox, QApplication, QFileDialog
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 from PyQt6.QtGui import QColor, QFont, QCursor
 import os
+import zipfile
+from datetime import datetime
 
 from .constants import Constants
 from .ui_components import ModernToggle, SettingsCard, HotkeyButton
@@ -61,6 +63,7 @@ class SettingsWindow(BasePage):
         self.content_layout.addWidget(self.tabs)
         
         self.tabs.addTab(self.setup_general_tab(), "General")
+        self.tabs.addTab(self.setup_data_tab(), "Data Management")
         self.tabs.addTab(self.setup_item_overlay_tab(), "Item Overlay")
         self.tabs.addTab(self.setup_quest_overlay_tab(), "Quest Overlay")
         self.tabs.addTab(self.setup_updates_tab(), "Updates")
@@ -225,6 +228,80 @@ class SettingsWindow(BasePage):
         
         layout.addWidget(card_scan)
         return page
+
+    # --- DATA MANAGEMENT TAB ---
+    def setup_data_tab(self):
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        
+        layout.addWidget(QLabel("Data & Backup", objectName="Header"))
+        
+        card = SettingsCard()
+        l_card = QVBoxLayout(card)
+        l_card.setContentsMargins(15, 15, 15, 15)
+        l_card.setSpacing(12)
+        
+        info_label = QLabel("Back up your settings and progress data to a zip file.\nYou can restore it later by extracting the files to the application 'data' folder.")
+        info_label.setWordWrap(True)
+        info_label.setStyleSheet("color: #ABB2BF; font-size: 13px; border: none; background: transparent;")
+        l_card.addWidget(info_label)
+        
+        l_card.addSpacing(10)
+        
+        btn_backup = QPushButton("Create Backup")
+        btn_backup.setFixedSize(160, 36)
+        btn_backup.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_backup.setStyleSheet("""
+            QPushButton { 
+                background-color: #3E4451; 
+                color: white; 
+                border: 1px solid #555; 
+                border-radius: 4px; 
+                font-weight: bold; 
+                font-size: 13px;
+            } 
+            QPushButton:hover { 
+                background-color: #4B5363; 
+                border-color: #777; 
+            }
+        """)
+        btn_backup.clicked.connect(self._backup_data)
+        l_card.addWidget(btn_backup)
+        
+        layout.addWidget(card)
+        layout.addStretch()
+        
+        return page
+
+    def _backup_data(self):
+        try:
+            # 1. Ask user for destination directory
+            dest_dir = QFileDialog.getExistingDirectory(self, "Select Backup Location")
+            if not dest_dir:
+                return
+
+            # 2. Generate filename
+            timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            zip_filename = f"ArcCompanion_Backup_{timestamp}.zip"
+            zip_path = os.path.join(dest_dir, zip_filename)
+
+            # 3. Create Zip
+            files_to_backup = [Constants.PROGRESS_FILE, Constants.CONFIG_FILE]
+            
+            with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                for file_path in files_to_backup:
+                    if os.path.exists(file_path):
+                        # Arc inside the zip will be just the filename (flat structure) 
+                        # or we could keep 'data/' prefix. 
+                        # Let's keep it simple: just the filename. It's easier for users to find.
+                        zipf.write(file_path, arcname=os.path.basename(file_path))
+            
+            QMessageBox.information(self, "Backup Successful", f"Backup created successfully:\n{zip_path}")
+            
+        except Exception as e:
+            QMessageBox.warning(self, "Backup Failed", f"An error occurred while creating backup:\n{e}")
 
     # --- UPDATES TAB ---
     def setup_updates_tab(self):

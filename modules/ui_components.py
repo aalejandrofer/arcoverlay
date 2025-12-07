@@ -176,6 +176,13 @@ class InventoryControl(QWidget):
             self._update_style()
             self.value_changed.emit()
 
+    def set_value(self, new_value):
+        """Force set value and update UI."""
+        self.value = max(0, min(self.max_val, new_value))
+        self.pbar.setValue(self.value)
+        self._update_style()
+        self.value_changed.emit()
+
     def get_value(self): return self.value
 
 class ModernToggle(QCheckBox):

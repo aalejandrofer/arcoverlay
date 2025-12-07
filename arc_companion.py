@@ -258,7 +258,7 @@ class ArcCompanionApp(QObject):
 
     def ensure_data_exists(self):
         if not (os.path.exists(Constants.DATA_DIR) and os.path.exists(os.path.join(Constants.DATA_DIR, 'versions.json'))):
-            msg = QMessageBox()
+            msg = QMessageBox(self.progress_hub if hasattr(self, 'progress_hub') else None)
             msg.setWindowTitle("Missing Data"); msg.setText("Missing data. Download now?")
             msg.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
             if msg.exec() == QMessageBox.StandardButton.Yes: self.run_manual_data_check(initial=True)
@@ -275,12 +275,12 @@ class ArcCompanionApp(QObject):
         
         if not initial:
             self.data_updater.checking_for_updates.connect(lambda: self.progress_hub.settings_tab.set_update_status("Checking..."))
-            self.data_updater.download_progress.connect(lambda c, t, f: self.progress_hub.settings_tab.set_update_status(f"Downloading: {f}"))
+            self.data_updater.download_progress.connect(lambda c, t, f: self.progress_hub.settings_tab.set_update_status(f"Downloading ({c}/{t}): {f}"))
             self.data_updater.update_complete.connect(lambda s, m: self.progress_hub.settings_tab.set_update_status(m))
         else:
-            self.progress_dialog = QProgressDialog("Connecting...", "Cancel", 0, 0)
+            self.progress_dialog = QProgressDialog("Connecting...", "Cancel", 0, 0, self.progress_hub)
             self.progress_dialog.setWindowModality(Qt.WindowModality.ApplicationModal); self.progress_dialog.show()
-            self.data_updater.download_progress.connect(lambda c, t, f: self.progress_dialog.setLabelText(f"Downloading: {f}"))
+            self.data_updater.download_progress.connect(lambda c, t, f: self.progress_dialog.setLabelText(f"Downloading ({c}/{t}): {f}"))
             self.data_updater.update_complete.connect(self._on_initial_complete)
 
         self.data_update_thread.started.connect(self.data_updater.run_check)
@@ -294,7 +294,7 @@ class ArcCompanionApp(QObject):
         else:
             self.progress_hub.settings_tab.set_update_status(msg)
             if files:
-                reply = QMessageBox.question(None, "Update", f"{msg}\nDownload now?", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+                reply = QMessageBox.question(self.progress_hub, "Update", f"{msg}\nDownload now?", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
                 if reply == QMessageBox.StandardButton.Yes: self.start_data_download.emit(files)
                 else: self.data_update_thread.quit()
             else: self.data_update_thread.quit()
@@ -317,7 +317,7 @@ class ArcCompanionApp(QObject):
     def _on_initial_complete(self, success, message):
         self.progress_dialog.close(); self.data_update_thread.quit()
         if success: self.reload_data_subsystems()
-        else: QMessageBox.critical(None, "Failed", message)
+        else: QMessageBox.critical(self.progress_hub, "Failed", message)
 
     def reload_data_subsystems(self):
         self.db = ItemDatabase(); self.data_manager = DataManager(self.db.items)

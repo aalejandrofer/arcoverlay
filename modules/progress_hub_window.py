@@ -211,7 +211,9 @@ class ProgressHubWindow(QWidget):
 
     def handle_reset(self):
         current_widget = self.tabs.currentWidget()
-        if hasattr(current_widget, 'reset_state'):
+        if hasattr(current_widget, 'confirm_reset'):
+            current_widget.confirm_reset()
+        elif hasattr(current_widget, 'reset_state'):
             current_widget.reset_state()
 
     def closeEvent(self, event):

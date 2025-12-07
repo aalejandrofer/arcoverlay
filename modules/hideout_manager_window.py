@@ -219,8 +219,8 @@ class HideoutManagerWindow(BasePage):
             self.data_manager.user_progress.setdefault('hideout_station_expanded', {})[sid] = self.all_expanded
         self.start_save_timer()
 
-    def reset_hideout_progress_confirmation(self):
-        msg = QMessageBox(); msg.setWindowTitle("Confirm Reset")
+    def confirm_reset(self):
+        msg = QMessageBox(self); msg.setWindowTitle("Confirm Reset")
         msg.setText("Are you sure you want to completely reset ALL Hideout progress?")
         msg.setIcon(QMessageBox.Icon.Warning)
         msg.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
@@ -235,8 +235,7 @@ class HideoutManagerWindow(BasePage):
             self.station_current_levels[sid] = 0
             self.data_manager.user_progress[sid] = 0
             for key, widget in self.inventory_widgets.items():
-                if key[0] == sid: widget.value = 0; widget.change(0) 
-        self.data_manager.user_progress.pop('hideout_inventory', None)
+                if key[0] == sid: widget.set_value(0) 
         self.start_save_timer()
         self.refresh_ui()
 

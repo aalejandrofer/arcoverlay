@@ -205,8 +205,8 @@ class QuestManagerWindow(BasePage):
              self.quest_widgets[q_id]['track_chk'].setChecked(False)
         self.start_save_timer(); self.rebuild_and_refresh_ui()
 
-    def reset_quest_progress_confirmation(self):
-        msg = QMessageBox(); msg.setWindowTitle("Confirm Reset")
+    def confirm_reset(self):
+        msg = QMessageBox(self); msg.setWindowTitle("Confirm Reset")
         msg.setText("Are you sure you want to completely reset ALL Quest progress?")
         msg.setIcon(QMessageBox.Icon.Warning)
         msg.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
