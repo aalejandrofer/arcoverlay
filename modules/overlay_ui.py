@@ -339,7 +339,10 @@ class ItemOverlayUI:
         screen_geom = overlay.screen().geometry()
         cursor_pos = QCursor.pos()
         overlay_height, overlay_width = overlay.size().height(), overlay.size().width()
-        pos_x, pos_y = cursor_pos.x() + 20, cursor_pos.y() + 20
+        offset_x = user_settings.getint('ItemOverlay', 'offset_x', fallback=0)
+        offset_y = user_settings.getint('ItemOverlay', 'offset_y', fallback=0)
+        # Base offset is 20px, user adds/subtracts from that
+        pos_x, pos_y = cursor_pos.x() + 20 + offset_x, cursor_pos.y() + 20 + offset_y
         
         if pos_y + overlay_height > screen_geom.height(): pos_y = screen_geom.height() - overlay_height - 10
         if pos_x + overlay_width > screen_geom.width(): pos_x = cursor_pos.x() - overlay_width - 20

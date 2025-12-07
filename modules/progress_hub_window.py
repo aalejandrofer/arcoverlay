@@ -207,6 +207,7 @@ class ProgressHubWindow(QWidget):
         if current_widget == self.hideout_tab: self.reset_btn.setText("Reset Hideout"); self.reset_btn.setVisible(True)
         elif current_widget == self.quest_tab: self.reset_btn.setText("Reset Quests"); self.reset_btn.setVisible(True)
         elif current_widget == self.project_tab: self.reset_btn.setText("Reset Expeditions"); self.reset_btn.setVisible(True)
+        elif current_widget == self.item_db_tab: self.reset_btn.setText("Reset Item Data"); self.reset_btn.setVisible(True)
         else: self.reset_btn.setVisible(False)
 
     def handle_reset(self):

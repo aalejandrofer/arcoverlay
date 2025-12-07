@@ -151,7 +151,22 @@ class HideoutManagerWindow(BasePage):
                     row.addWidget(lbl_amount)
                     level_req_layout.addLayout(row)
 
-            self.station_widgets[station_id] = { 'frame': station_frame, 'btn_up': btn_up, 'btn_down': btn_down, 'lvl_lbl': lvl_lbl, 'toggle_btn': toggle_btn, 'level_containers': level_containers }
+            # Add "No available upgrades" label
+            no_upgrades_lbl = QLabel("No available upgrades at this time")
+            no_upgrades_lbl.setStyleSheet("color: #9DA5B4; font-style: italic; padding: 5px;")
+            no_upgrades_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            levels_layout.addWidget(no_upgrades_lbl)
+            no_upgrades_lbl.hide()
+
+            self.station_widgets[station_id] = { 
+                'frame': station_frame, 
+                'btn_up': btn_up, 
+                'btn_down': btn_down, 
+                'lvl_lbl': lvl_lbl, 
+                'toggle_btn': toggle_btn, 
+                'level_containers': level_containers,
+                'no_upgrades_lbl': no_upgrades_lbl
+            }
 
     def _on_inventory_changed(self, station_id, lvl_num, item_id):
         """Called when an inventory control value changes - syncs to user_progress immediately."""
@@ -185,9 +200,14 @@ class HideoutManagerWindow(BasePage):
             if widgets['lvl_lbl']: widgets['lvl_lbl'].setText(str(self.station_current_levels[sid]))
             show_all = self.chk_show_all_reqs.isChecked()
             curr_lvl = self.station_current_levels[sid]
+            any_visible = False
             for lvl, container in widgets['level_containers'].items():
                 is_visible = show_all or (lvl > curr_lvl)
                 container.setVisible(is_visible)
+                if is_visible: any_visible = True
+            
+            if 'no_upgrades_lbl' in widgets:
+                widgets['no_upgrades_lbl'].setVisible(not any_visible)
 
     def move_station(self, station_id, direction):
         try: current_index = self.station_order.index(station_id)

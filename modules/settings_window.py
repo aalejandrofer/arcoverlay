@@ -7,6 +7,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 from PyQt6.QtGui import QColor, QFont, QCursor
 import os
+import shutil
 import zipfile
 from datetime import datetime
 
@@ -70,11 +71,11 @@ class SettingsWindow(BasePage):
 
         self.footer_layout.addStretch()
         
-        self.btn_revert = QPushButton("Revert Changes")
+        self.btn_revert = QPushButton("Reset")
         self.btn_revert.setObjectName("action_button_red")
         self.btn_revert.setFixedSize(130, 32)
         self.btn_revert.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_revert.clicked.connect(self.load_settings)
+        self.btn_revert.clicked.connect(self.reset_current_tab)
         
         self.btn_save = QPushButton("Save Settings")
         self.btn_save.setObjectName("action_button_green")
@@ -243,12 +244,14 @@ class SettingsWindow(BasePage):
         l_card.setContentsMargins(15, 15, 15, 15)
         l_card.setSpacing(12)
         
-        info_label = QLabel("Back up your settings and progress data to a zip file.\nYou can restore it later by extracting the files to the application 'data' folder.")
+        info_label = QLabel("Back up your settings and progress data to a zip file.\nYou can restore it easily using the 'Restore Backup' button.")
         info_label.setWordWrap(True)
         info_label.setStyleSheet("color: #ABB2BF; font-size: 13px; border: none; background: transparent;")
         l_card.addWidget(info_label)
         
         l_card.addSpacing(10)
+        
+        btn_layout = QHBoxLayout()
         
         btn_backup = QPushButton("Create Backup")
         btn_backup.setFixedSize(160, 36)
@@ -268,7 +271,32 @@ class SettingsWindow(BasePage):
             }
         """)
         btn_backup.clicked.connect(self._backup_data)
-        l_card.addWidget(btn_backup)
+        
+        btn_restore = QPushButton("Restore Backup")
+        btn_restore.setFixedSize(160, 36)
+        btn_restore.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_restore.setStyleSheet("""
+            QPushButton { 
+                background-color: #3E4451; 
+                color: #E5C07B; 
+                border: 1px solid #E5C07B; 
+                border-radius: 4px; 
+                font-weight: bold; 
+                font-size: 13px;
+            } 
+            QPushButton:hover { 
+                background-color: #4B5363; 
+                border-color: #F0D080; 
+            }
+        """)
+        btn_restore.clicked.connect(self._restore_data)
+        
+        btn_layout.addWidget(btn_backup)
+        btn_layout.addSpacing(15)
+        btn_layout.addWidget(btn_restore)
+        btn_layout.addStretch()
+        
+        l_card.addLayout(btn_layout)
         
         layout.addWidget(card)
         layout.addStretch()
@@ -303,6 +331,41 @@ class SettingsWindow(BasePage):
         except Exception as e:
             QMessageBox.warning(self, "Backup Failed", f"An error occurred while creating backup:\n{e}")
 
+    def _restore_data(self):
+        try:
+            zip_path, _ = QFileDialog.getOpenFileName(self, "Select Backup File", "", "Zip Files (*.zip)")
+            if not zip_path:
+                return
+
+            with zipfile.ZipFile(zip_path, 'r') as zipf:
+                # Validate contents
+                file_list = zipf.namelist()
+                has_progress = os.path.basename(Constants.PROGRESS_FILE) in file_list
+                has_config = os.path.basename(Constants.CONFIG_FILE) in file_list
+                
+                if not has_progress and not has_config:
+                    QMessageBox.warning(self, "Invalid Backup", "The selected zip file does not contain a valid ArcCompanion backup (progress.json or config.ini).")
+                    return
+                
+                # Confirm
+                reply = QMessageBox.question(self, "Confirm Restore", 
+                                             "This will OVERWRITE your current settings and progress.\nAre you sure you want to proceed?",
+                                             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+                
+                if reply == QMessageBox.StandardButton.Yes:
+                    target_files = [os.path.basename(Constants.PROGRESS_FILE), os.path.basename(Constants.CONFIG_FILE)]
+                    
+                    for filename in target_files:
+                        if filename in file_list:
+                             target_path = os.path.join(Constants.DATA_DIR, filename)
+                             with zipf.open(filename) as source, open(target_path, "wb") as target:
+                                 shutil.copyfileobj(source, target)
+                    
+                    QMessageBox.information(self, "Restore Successful", "Data restored successfully.\nPlease RESTART the application for changes to take effect.")
+            
+        except Exception as e:
+            QMessageBox.warning(self, "Restore Failed", f"An error occurred while restoring backup:\n{e}")
+
     # --- UPDATES TAB ---
     def setup_updates_tab(self):
         page = QWidget(); layout = QVBoxLayout(page); layout.setContentsMargins(10, 10, 10, 10); layout.setAlignment(Qt.AlignmentFlag.AlignTop)
@@ -331,6 +394,11 @@ class SettingsWindow(BasePage):
         
         self.item_font_size = self._create_slider(l_app, "Font Size:", 8, 24, 12, "pt", lambda: self.update_preview())
         self.item_duration = self._create_slider(l_app, "Duration:", 1, 10, 3, "s", float_scale=True)
+        
+        # Offsets
+        l_app.addSpacing(5)
+        self.slider_offset_x = self._create_slider(l_app, "Offset X:", -250, 250, 0, "px")
+        self.slider_offset_y = self._create_slider(l_app, "Offset Y:", -250, 250, 0, "px")
         
         left_col.addWidget(card_app)
 
@@ -412,6 +480,7 @@ class SettingsWindow(BasePage):
         if callback: callback()
         slider.valueChanged.connect(update_lbl); row.addWidget(slider); row.addWidget(val_lbl); layout.addLayout(row); return slider
 
+
     def _create_color_spinbox(self):
         spin = QSpinBox(); spin.setRange(0, 255); spin.setFixedWidth(45); spin.setAlignment(Qt.AlignmentFlag.AlignCenter); spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons); spin.setStyleSheet("QSpinBox { background-color: #232834; color: #E0E6ED; border: 1px solid #333; padding: 4px; border-radius: 4px; font-weight: bold; } QSpinBox:focus { border: 1px solid #4476ED; }"); return spin
 
@@ -479,6 +548,8 @@ class SettingsWindow(BasePage):
 
         self.item_font_size.setValue(self.cfg.get_item_font_size())
         self.item_duration.setValue(int(self.cfg.get_item_duration() * 10))
+        self.slider_offset_x.setValue(self.cfg.get_item_offset_x())
+        self.slider_offset_y.setValue(self.cfg.get_item_offset_y())
         self.chk_future_hideout.setChecked(self.cfg.get_show_future_hideout())
         self.chk_future_project.setChecked(self.cfg.get_show_future_project())
         
@@ -510,6 +581,68 @@ class SettingsWindow(BasePage):
         self.cfg.set('ItemOverlay', 'show_all_future_project_reqs', True)
         self.cfg.save()
 
+    def reset_current_tab(self):
+        index = self.tabs.currentIndex()
+        tab_text = self.tabs.tabText(index)
+        
+        reply = QMessageBox.question(self, "Confirm Reset", 
+                                     f"Are you sure you want to reset the '{tab_text}' settings to their defaults?",
+                                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            if tab_text == "General":
+                self._reset_general_tab()
+            elif tab_text == "Item Overlay":
+                self._reset_item_overlay_tab()
+            elif tab_text == "Quest Overlay":
+                self._reset_quest_overlay_tab()
+            # Data and Updates tabs do not have settings to reset
+
+    def _reset_general_tab(self):
+        # Language
+        lang = self.cfg.DEFAULT_LANG
+        for name, (json_code, tess_code) in Constants.LANGUAGES.items():
+            if tess_code == lang: 
+                self.lang_combo.setCurrentText(name)
+                break
+        
+        # Hotkeys
+        self.hotkey_btn.set_hotkey(self.cfg.DEFAULT_HOTKEY_PRICE)
+        self.quest_hotkey_btn.set_hotkey(self.cfg.DEFAULT_HOTKEY_QUEST)
+        self.hub_hotkey_btn.set_hotkey(self.cfg.DEFAULT_HOTKEY_HUB)
+        
+        # OCR Color & Settings
+        self._reset_ocr_color() 
+        self.chk_ultrawide.setChecked(self.cfg.DEFAULT_FULL_SCREEN)
+        self.chk_debug_save.setChecked(self.cfg.DEFAULT_DEBUG_SAVE)
+
+    def _reset_item_overlay_tab(self):
+        self.item_font_size.setValue(self.cfg.DEFAULT_ITEM_FONT)
+        self.item_duration.setValue(int(self.cfg.DEFAULT_ITEM_DURATION * 10))
+        self.slider_offset_x.setValue(self.cfg.DEFAULT_ITEM_OFFSET_X)
+        self.slider_offset_y.setValue(self.cfg.DEFAULT_ITEM_OFFSET_Y)
+        
+        self.chk_future_hideout.setChecked(self.cfg.DEFAULT_SHOW_FUTURE_HIDEOUT)
+        self.chk_future_project.setChecked(self.cfg.DEFAULT_SHOW_FUTURE_PROJECT)
+        
+        # Reset Order
+        default_order = [x.strip() for x in self.cfg.DEFAULT_SECTION_ORDER.split(',')]
+        self.overlay_order_list.clear()
+        for key in default_order:
+            if key in self.SECTIONS:
+                item = QListWidgetItem(self.SECTIONS[key][0])
+                item.setData(Qt.ItemDataRole.UserRole, key)
+                item.setCheckState(Qt.CheckState.Checked)
+                self.overlay_order_list.addItem(item)
+        
+        self.update_preview()
+
+    def _reset_quest_overlay_tab(self):
+        self.quest_font_size.setValue(self.cfg.DEFAULT_QUEST_FONT)
+        self.quest_width.setValue(self.cfg.DEFAULT_QUEST_WIDTH)
+        self.quest_opacity.setValue(self.cfg.DEFAULT_QUEST_OPACITY)
+        self.quest_duration.setValue(int(self.cfg.DEFAULT_QUEST_DURATION * 10))
+
     def save_settings(self):
         self.cfg.set('Hotkeys', 'price_check', self.hotkey_btn.current_key_string); self.cfg.set('Hotkeys', 'quest_log', self.quest_hotkey_btn.current_key_string); self.cfg.set('Hotkeys', 'hub_hotkey', self.hub_hotkey_btn.current_key_string)
         display_name = self.lang_combo.currentText()
@@ -535,6 +668,8 @@ class SettingsWindow(BasePage):
             self.item_duration.value()/10.0, 
             self.chk_future_hideout.isChecked(), 
             self.chk_future_project.isChecked(),
+            self.slider_offset_x.value(),
+            self.slider_offset_y.value(),
             ",".join(new_order),
             section_states
         )

@@ -427,6 +427,55 @@ class ItemDatabaseWindow(BasePage):
         reqs = self.req_cache.get(item.get('id'), {'details': {}})['details']
         self.inspector.set_item(item, reqs)
 
+    def confirm_reset(self):
+        from PyQt6.QtWidgets import QMessageBox
+        # Main reset confirmation
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Confirm Reset")
+        msg.setText("Are you sure you want to completely reset ALL Stash, Blueprints, and Tracked Items?")
+        msg.setIcon(QMessageBox.Icon.Warning)
+        msg.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        msg.setDefaultButton(QMessageBox.StandardButton.No)
+        
+        if msg.exec() == QMessageBox.StandardButton.Yes:
+            # Secondary confirmation for notes
+            msg_notes = QMessageBox(self)
+            msg_notes.setWindowTitle("Clear Notes?")
+            msg_notes.setText("Do you also want to clear all Item Notes?")
+            msg_notes.setInformativeText("Select 'No' to keep your personal notes.")
+            msg_notes.setIcon(QMessageBox.Icon.Question)
+            msg_notes.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            msg_notes.setDefaultButton(QMessageBox.StandardButton.No)
+            
+            clear_notes = (msg_notes.exec() == QMessageBox.StandardButton.Yes)
+            self.reset_state(clear_notes=clear_notes)
+
+    def reset_state(self, clear_notes=False):
+        self.data_manager.user_progress['stash_inventory'] = {}
+        self.data_manager.user_progress['tracked_items'] = []
+        
+        if clear_notes:
+            self.data_manager.user_progress['item_notes'] = {}
+            
+        self.data_manager.save_user_progress()
+        
+        # Reset UI filters
+        self.reset_filters()
+        
+        # Re-apply defaults (e.g. tracking default blueprints if needed)
+        self._enforce_blueprint_defaults()
+        
+        # Refresh UI
+        self.filter_items()
+        self.update_blueprint_stats()
+        
+        # If inspector is open, refresh it too
+        if self.inspector.isVisible() and self.selected_item_id:
+            item = self.data_manager.id_to_item_map.get(self.selected_item_id)
+            if item:
+                reqs = self.req_cache.get(item.get('id'), {'details': {}})['details']
+                self.inspector.set_item(item, reqs)
+
     # --- NEW: Explicit Cleanup Method ---
     def cleanup(self):
         """Called by parent when closing to stop image download threads."""

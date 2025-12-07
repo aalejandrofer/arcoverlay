@@ -98,6 +98,8 @@ class QuestManagerWindow(BasePage):
                 if obj_text in completed_objs_saved: check_box.setChecked(True)
                 check_box.stateChanged.connect(self.start_save_timer)
                 text_label = QLabel(obj_text); text_label.setWordWrap(True)
+                # Ensure immediate visual update
+                check_box.stateChanged.connect(lambda _, cb=check_box, lbl=text_label: lbl.setStyleSheet("color: #5C6370; text-decoration: line-through;" if cb.isChecked() else "color: #E0E6ED;"))
                 obj_layout.addWidget(check_box); obj_layout.addWidget(text_label, 1)
                 layout.addLayout(obj_layout)
                 obj_widgets.append({'text': obj_text, 'checkbox': check_box, 'label': text_label})
@@ -109,6 +111,7 @@ class QuestManagerWindow(BasePage):
         for qid, widgets in self.quest_widgets.items():
             prog = self.data_manager.user_progress['quests'].setdefault(qid, {})
             prog['is_tracked'] = widgets['track_chk'].isChecked()
+            prog['objectives_completed'] = [obj['text'] for obj in widgets['objs'] if obj['checkbox'].isChecked()]
             
         def sort_key(q_id):
             prog = self.data_manager.user_progress['quests'].get(q_id, {})
