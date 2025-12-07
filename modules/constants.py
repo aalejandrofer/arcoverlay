@@ -288,7 +288,10 @@ class Constants:
         font-size: 13px;
     }
 
-    QMessageBox QLabel {
+    QMessageBox, QProgressDialog {
+        background-color: #2B303B;
+    }
+    QMessageBox QLabel, QProgressDialog QLabel {
         color: #E0E6ED;
     }
 

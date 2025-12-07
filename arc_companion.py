@@ -400,6 +400,8 @@ class ArcCompanionApp(QObject):
         self.progress_hub.activateWindow()
         self.progress_hub.raise_()
 
+from modules.ui_components import set_dark_title_bar, DarkTitleBarProxy
+
 def main():
     def get_tesseract_path():
         if getattr(sys, 'frozen', False): return os.path.join(getattr(sys, '_MEIPASS', os.path.dirname(sys.executable)), 'Tesseract-OCR', 'tesseract.exe')
@@ -417,6 +419,13 @@ def main():
     try:
         app_instance = QApplication(sys.argv)
         app_instance.setStyleSheet(Constants.DARK_THEME_QSS)
+        
+        # Apply dark title bars globally
+        dark_proxy = DarkTitleBarProxy()
+        app_instance.installEventFilter(dark_proxy)
+        # Keep reference to prevent GC
+        app_instance._dark_proxy = dark_proxy
+        
         if os.path.exists(Constants.ICON_FILE): app_instance.setWindowIcon(QIcon(Constants.ICON_FILE))
         shared_memory = QSharedMemory("ArcCompanion_Unique_Instance_Lock")
         if not shared_memory.create(1): QMessageBox.warning(None, "Already Running", "Arc Companion is already running."); sys.exit(0)

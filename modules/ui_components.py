@@ -9,6 +9,7 @@ from PyQt6.QtGui import (
 )
 import os
 import ctypes
+from PyQt6.QtCore import QObject, QEvent
 
 def set_dark_title_bar(window: QWidget):
     """
@@ -22,6 +23,16 @@ def set_dark_title_bar(window: QWidget):
         ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 20, ctypes.byref(value), 4)
     except Exception:
         pass
+
+class DarkTitleBarProxy(QObject):
+    """
+    Event filter to automatically apply dark title bars to all newly created top-level windows.
+    """
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.Type.Show and isinstance(obj, QWidget):
+            if obj.isWindow():
+                set_dark_title_bar(obj)
+        return False
 
 # =============================================================================
 # HEADER COMPONENT (New)

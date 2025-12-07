@@ -105,7 +105,7 @@ class BaseOverlay(QWidget):
         if bold: font.setBold(True)
         lbl.setFont(font)
         
-        style = f"margin-left: {indent}px;";
+        style = f"margin-left: {indent}px; font-size: {font_size}pt;";
         if color: style += f" color: {color};"
         lbl.setStyleSheet(style)
         
@@ -385,7 +385,7 @@ class QuestOverlayUI:
                     txt = f"■ {objective}"
                     lbl = QLabel(txt); lbl.setWordWrap(True); lbl.setFont(QFont("Segoe UI", font_size))
                     if is_completed: lbl.setText(f"<span style='text-decoration: line-through;'>{txt}</span>")
-                    lbl.setStyleSheet(f"color: {color}; margin-left: 10px;")
+                    lbl.setStyleSheet(f"color: {color}; margin-left: 10px; font-size: {font_size}pt;")
                     overlay.container_layout.addWidget(lbl)
 
         overlay.adjustSize()
