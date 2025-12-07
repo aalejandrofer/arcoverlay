@@ -12,7 +12,7 @@ from PyQt6.QtGui import QIcon, QAction, QDesktopServices
 from PyQt6.QtCore import QObject, pyqtSignal, QThread, Qt, QUrl, QSharedMemory
 
 from modules.constants import Constants
-from modules.overlay_ui import ItemOverlayUI, QuestOverlayUI
+from modules.overlay_ui import ItemOverlay, QuestOverlayUI
 from modules.progress_hub_window import ProgressHubWindow
 from modules.data_manager import ItemDatabase, DataManager
 from modules.scanner import ItemScanner
@@ -204,6 +204,12 @@ class ArcCompanionApp(QObject):
 
         self.scanner.update_settings(self.target_color, self.ocr_lang_code, self.json_lang_code, full_screen_mode=full_screen, save_debug_images=save_debug)
         
+        # --- NEW: Trigger Live Overlay Update ---
+        for overlay in self.overlays:
+            if hasattr(overlay, 'refresh_ui'):    
+                overlay.refresh_ui()
+        # ----------------------------------------
+
         if is_initial_load: print(f"[INFO] Settings Loaded. Lang: {self.ocr_lang_code}")
         else: print("Settings reloaded.")
 
@@ -249,7 +255,10 @@ class ArcCompanionApp(QObject):
         except Exception as e: print(f"Error: {e}")
 
     def display_item_overlay(self, data):
-        ov = ItemOverlayUI.create_window(data['item'], self.config_manager.parser, data['blueprint'], data['hideout'], data['project'], data['trade'], self.data_manager, data['note'], lang_code=self.json_lang_code, stash_count=data['stash_count'], is_collected_blueprint=data['is_collected_bp'])
+        # Use simple instantiation instead of factory
+        from modules.overlay_ui import ItemOverlay
+        ov = ItemOverlay(data['item'], self.config_manager.parser, data['blueprint'], data['hideout'], data['project'], data['trade'], self.data_manager, data['note'], lang_code=self.json_lang_code, stash_count=data['stash_count'], is_collected_blueprint=data['is_collected_bp'])
+        ov.show_smart()
         self.overlays.append(ov)
 
     def display_quest_overlay(self, tracked):

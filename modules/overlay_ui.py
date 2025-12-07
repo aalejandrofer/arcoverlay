@@ -120,62 +120,89 @@ class BaseOverlay(QWidget):
         self.move(x, y)
         self.show()
 
-class ItemOverlayUI:
-    @staticmethod
-    def create_window(item_data, user_settings, blueprint_required, hideout_reqs, project_reqs, trade_info, data_manager, user_note="", lang_code="en", stash_count=0, is_collected_blueprint=False):
+class ItemOverlay(BaseOverlay):
+    def __init__(self, item_data, user_settings, blueprint_required, hideout_reqs, project_reqs, trade_info, data_manager, user_note="", lang_code="en", stash_count=0, is_collected_blueprint=False):
+        # Initial config read for constructor args
         duration = user_settings.getfloat('ItemOverlay', 'duration_seconds', fallback=3.0) * 1000
         font_size = user_settings.getint('ItemOverlay', 'font_size', fallback=12)
-        
         min_w = max(280, font_size * 25)
         max_w = max(400, font_size * 35)
         
-        overlay = BaseOverlay(duration, min_width=min_w, max_width=max_w, enable_distance_close=True) 
+        super().__init__(duration, min_width=min_w, max_width=max_w, enable_distance_close=True)
         
-        rarity = item_data.get('rarity', 'Common')
+        # storage
+        self.item_data = item_data
+        self.user_settings = user_settings
+        self.blueprint_required = blueprint_required
+        self.hideout_reqs = hideout_reqs
+        self.project_reqs = project_reqs
+        self.trade_info = trade_info
+        self.data_manager = data_manager
+        self.user_note = user_note
+        self.lang_code = lang_code
+        self.stash_count = stash_count
+        self.is_collected_blueprint = is_collected_blueprint
+        
+        self.refresh_ui()
+
+    def refresh_ui(self):
+        # 1. Clear existing layout
+        while self.container_layout.count():
+            item = self.container_layout.takeAt(0)
+            widget = item.widget()
+            if widget:
+                widget.deleteLater()
+
+        # 2. Re-read settings
+        font_size = self.user_settings.getint('ItemOverlay', 'font_size', fallback=12)
+        min_w = max(280, font_size * 25)
+        max_w = max(400, font_size * 35)
+        self.container.setMinimumWidth(min_w)
+        self.container.setMaximumWidth(max_w)
+        
+        # 3. Apply Border Color
+        rarity = self.item_data.get('rarity', 'Common')
         rarity_color = Constants.RARITY_COLORS.get(rarity, "#FFFFFF")
+        self.set_border_color(rarity_color)
         
-        overlay.set_border_color(rarity_color)
-        
-        item_id = item_data.get('id')
-        tracked_items = data_manager.user_progress.get('tracked_items', [])
+        # 4. Header (Name + Tracked + ticks)
+        item_id = self.item_data.get('id')
+        tracked_items = self.data_manager.user_progress.get('tracked_items', [])
         is_tracked = item_id and item_id in tracked_items
-        show_indicator = user_settings.getboolean('ItemOverlay', 'show_tracked_indicator', fallback=True)
+        show_indicator = self.user_settings.getboolean('ItemOverlay', 'show_tracked_indicator', fallback=True)
         
-        display_name = data_manager.get_localized_name(item_data, lang_code)
+        display_name = self.data_manager.get_localized_name(self.item_data, self.lang_code)
         
         if is_tracked and show_indicator:
             display_name = f"★ {display_name}"
             
-        # --- NEW: Collected Blueprint Tick ---
-        if is_collected_blueprint:
+        if self.is_collected_blueprint:
             display_name += " <span style='color:#4CAF50'>✓</span>"
-        # -------------------------------------
             
-        overlay.add_label(display_name, font_size + 3, True, color=rarity_color)
+        self.add_label(display_name, font_size + 3, True, color=rarity_color)
         
-        has_content = False
+        self.has_content = False
 
+        # --- Renderers ---
         def render_trader():
-            nonlocal has_content
-            if user_settings.getboolean('ItemOverlay', 'show_trader_info', fallback=True) and trade_info:
-                if has_content: overlay.add_separator()
+            if self.user_settings.getboolean('ItemOverlay', 'show_trader_info', fallback=True) and self.trade_info:
+                if self.has_content: self.add_separator()
                 
-                for trade in trade_info:
+                for trade in self.trade_info:
                     trader, cost = trade.get('trader'), trade.get('cost', {})
                     cost_qty, cost_item_id = cost.get('quantity'), cost.get('itemId')
                     
                     if cost_item_id == "coins": cost_name = "Coins"
-                    else: cost_name = data_manager.get_localized_name(cost_item_id, lang_code).title()
+                    else: cost_name = self.data_manager.get_localized_name(cost_item_id, self.lang_code).title()
 
                     overlay_text = f"{trader.title()}: {cost_qty}x {cost_name}"
-                    overlay.add_label(overlay_text, font_size, False, "#98C379") 
-                has_content = True
+                    self.add_label(overlay_text, font_size, False, "#98C379") 
+                self.has_content = True
 
         def render_price():
-            nonlocal has_content
-            if user_settings.getboolean('ItemOverlay', 'show_price', fallback=True):
-                if has_content: overlay.add_separator()
-                raw_val = item_data.get('value')
+            if self.user_settings.getboolean('ItemOverlay', 'show_price', fallback=True):
+                if self.has_content: self.add_separator()
+                raw_val = self.item_data.get('value')
                 if raw_val is not None:
                     try: val_str = f"{int(raw_val):,}"
                     except ValueError: val_str = str(raw_val)
@@ -189,20 +216,15 @@ class ItemOverlayUI:
                 else:
                     label_text = f"Price: <span style='color:#E5C07B'>£{val_str}</span>"
                     
-                overlay.add_label(label_text, font_size, True, color=None) 
-                has_content = True
+                self.add_label(label_text, font_size, True, color=None) 
+                self.has_content = True
 
-        # --- NEW: Render Storage Logic ---
         def render_storage():
-            nonlocal has_content
-            if user_settings.getboolean('ItemOverlay', 'show_storage_info', fallback=True):
-                # Don't show separation line if price was the previous item (grouped generally), 
-                # but if user reorders it, add separator if needed. 
-                # For cleaner UI, we just rely on the order list.
-                if has_content: overlay.add_separator()
+            if self.user_settings.getboolean('ItemOverlay', 'show_storage_info', fallback=True):
+                if self.has_content: self.add_separator()
                 
                 final_path = Constants.STORAGE_ICON_PATH
-                count_str = f"{stash_count:,}"
+                count_str = f"{self.stash_count:,}"
                 
                 if final_path and os.path.exists(final_path):
                     img_size = font_size + 4
@@ -211,110 +233,99 @@ class ItemOverlayUI:
                 else:
                     label_text = f"Stash: <span style='color:#ABB2BF'>{count_str}</span>"
                 
-                overlay.add_label(label_text, font_size, True, color=None)
-                has_content = True
-        # ---------------------------------
+                self.add_label(label_text, font_size, True, color=None)
+                self.has_content = True
 
         def render_crafting():
-            nonlocal has_content
-            if user_settings.getboolean('ItemOverlay', 'show_crafting_info', fallback=True):
-                craft_bench, craft_time = item_data.get('craftBench'), item_data.get('craftTime')
+            if self.user_settings.getboolean('ItemOverlay', 'show_crafting_info', fallback=True):
+                craft_bench, craft_time = self.item_data.get('craftBench'), self.item_data.get('craftTime')
                 if isinstance(craft_bench, list): craft_bench = ", ".join([str(b).replace('_', ' ').title() for b in craft_bench])
                 elif isinstance(craft_bench, str): craft_bench = craft_bench.replace('_', ' ').title()
                 
-                if craft_bench or blueprint_required:
-                    if has_content: overlay.add_separator()
-                    overlay.add_label("Crafting", font_size - 1, True, "#5C6370") 
-                    if craft_bench: overlay.add_label(f"■ {craft_bench}{f' ({craft_time}s)' if craft_time else ''}", font_size, False, "#ABB2BF", 10)
-                    if blueprint_required: overlay.add_label("■ Blueprint Required", font_size, True, "#61AFEF", 10) 
-                    has_content = True
+                if craft_bench or self.blueprint_required:
+                    if self.has_content: self.add_separator()
+                    self.add_label("Crafting", font_size - 1, True, "#5C6370") 
+                    if craft_bench: self.add_label(f"■ {craft_bench}{f' ({craft_time}s)' if craft_time else ''}", font_size, False, "#ABB2BF", 10)
+                    if self.blueprint_required: self.add_label("■ Blueprint Required", font_size, True, "#61AFEF", 10) 
+                    self.has_content = True
 
         def render_hideout():
-            nonlocal has_content
-            if not user_settings.getboolean('ItemOverlay', 'show_hideout_reqs', fallback=True): return
-            show_future = user_settings.getboolean('ItemOverlay', 'show_all_future_reqs', fallback=False)
+            if not self.user_settings.getboolean('ItemOverlay', 'show_hideout_reqs', fallback=True): return
+            show_future = self.user_settings.getboolean('ItemOverlay', 'show_all_future_reqs', fallback=False)
             
-            # Handle both old format (2-tuple) and new format (4-tuple)
             filtered_reqs = []
-            if hideout_reqs:
-                for req in hideout_reqs:
+            if self.hideout_reqs:
+                for req in self.hideout_reqs:
                     if len(req) >= 4:
-                        # New format: (display_str, req_type, is_complete, needed_qty)
                         req_str, req_type, is_complete, needed_qty = req[0], req[1], req[2], req[3]
                         if req_type == 'next' or show_future:
                             filtered_reqs.append((req_str, req_type, is_complete, needed_qty))
                     else:
-                        # Old format: (display_str, req_type) - for backwards compatibility
                         req_str, req_type = req[0], req[1]
                         if req_type == 'next' or show_future:
                             filtered_reqs.append((req_str, req_type, False, 0))
             
             if filtered_reqs:
-                if has_content: overlay.add_separator()
-                overlay.add_label("Hideout Upgrade:", font_size - 1, True, "#5C6370")
+                if self.has_content: self.add_separator()
+                self.add_label("Hideout Upgrade:", font_size - 1, True, "#5C6370")
                 for req_data in filtered_reqs:
                     req_str, req_type, is_complete, needed_qty = req_data
                     if is_complete:
-                        # Show with green tick for completed requirements
                         color = "#4CAF50"  # Green
                         display_text = f"■ {req_str} <span style='color:#4CAF50'>✓</span>"
                     else:
                         color = "#98C379" if req_type == 'next' else "#D19A66" 
                         display_text = f"■ {req_str}"
-                    overlay.add_label(display_text, font_size, False, color, 10)
-                has_content = True
+                    self.add_label(display_text, font_size, False, color, 10)
+                self.has_content = True
 
         def render_project():
-            nonlocal has_content
-            if not user_settings.getboolean('ItemOverlay', 'show_project_reqs', fallback=True): return
-            show_future = user_settings.getboolean('ItemOverlay', 'show_all_future_project_reqs', fallback=False)
-            filtered_reqs = [r for r in project_reqs if r[1] == 'next' or show_future] if project_reqs else []
+            if not self.user_settings.getboolean('ItemOverlay', 'show_project_reqs', fallback=True): return
+            show_future = self.user_settings.getboolean('ItemOverlay', 'show_all_future_project_reqs', fallback=False)
+            filtered_reqs = [r for r in self.project_reqs if r[1] == 'next' or show_future] if self.project_reqs else []
             if filtered_reqs:
-                if has_content: overlay.add_separator()
-                overlay.add_label("Project Request:", font_size - 1, True, "#5C6370")
+                if self.has_content: self.add_separator()
+                self.add_label("Project Request:", font_size - 1, True, "#5C6370")
                 for req_str, req_type in filtered_reqs:
                     color = "#98C379" if req_type == 'next' else "#D19A66" 
-                    overlay.add_label(f"■ {req_str}", font_size, False, color, 10)
-                has_content = True
+                    self.add_label(f"■ {req_str}", font_size, False, color, 10)
+                self.has_content = True
 
         def render_recycle():
-            nonlocal has_content
-            recycles = item_data.get('recyclesInto', {})
-            if user_settings.getboolean('ItemOverlay', 'show_recycles_into', fallback=False) and recycles:
-                if has_content: overlay.add_separator()
-                overlay.add_label("Recycles Into:", font_size - 1, True, "#5C6370")
+            recycles = self.item_data.get('recyclesInto', {})
+            if self.user_settings.getboolean('ItemOverlay', 'show_recycles_into', fallback=False) and recycles:
+                if self.has_content: self.add_separator()
+                self.add_label("Recycles Into:", font_size - 1, True, "#5C6370")
                 for item_id_raw, quantity in recycles.items():
-                    item_name = data_manager.get_localized_name(item_id_raw, lang_code)
-                    comp_details = data_manager.get_item_by_name(data_manager.id_to_name_map.get(item_id_raw)) 
-                    if not comp_details: comp_details = data_manager.id_to_item_map.get(item_id_raw)
+                    item_name = self.data_manager.get_localized_name(item_id_raw, self.lang_code)
+                    comp_details = self.data_manager.get_item_by_name(self.data_manager.id_to_name_map.get(item_id_raw)) 
+                    if not comp_details: comp_details = self.data_manager.id_to_item_map.get(item_id_raw)
                     comp_rarity = comp_details.get('rarity', 'Common') if comp_details else 'Common'
-                    overlay.add_label(f"■ {quantity}x {item_name}", font_size, False, Constants.RARITY_COLORS.get(comp_rarity, "#FFFFFF"), 10)
-                has_content = True
+                    self.add_label(f"■ {quantity}x {item_name}", font_size, False, Constants.RARITY_COLORS.get(comp_rarity, "#FFFFFF"), 10)
+                self.has_content = True
 
         def render_salvage():
-            nonlocal has_content
-            salvages = item_data.get('salvagesInto', {})
-            if user_settings.getboolean('ItemOverlay', 'show_salvages_into', fallback=False) and salvages:
-                if has_content: overlay.add_separator()
-                overlay.add_label("Salvages Into:", font_size - 1, True, "#5C6370")
+            salvages = self.item_data.get('salvagesInto', {})
+            if self.user_settings.getboolean('ItemOverlay', 'show_salvages_into', fallback=False) and salvages:
+                if self.has_content: self.add_separator()
+                self.add_label("Salvages Into:", font_size - 1, True, "#5C6370")
                 for item_id_raw, quantity in salvages.items():
-                    item_name = data_manager.get_localized_name(item_id_raw, lang_code)
-                    comp_details = data_manager.id_to_item_map.get(item_id_raw)
+                    item_name = self.data_manager.get_localized_name(item_id_raw, self.lang_code)
+                    comp_details = self.data_manager.id_to_item_map.get(item_id_raw)
                     comp_rarity = comp_details.get('rarity', 'Common') if comp_details else 'Common'
-                    overlay.add_label(f"■ {quantity}x {item_name}", font_size, False, Constants.RARITY_COLORS.get(comp_rarity, "#FFFFFF"), 10)
-                has_content = True
+                    self.add_label(f"■ {quantity}x {item_name}", font_size, False, Constants.RARITY_COLORS.get(comp_rarity, "#FFFFFF"), 10)
+                self.has_content = True
 
         def render_notes():
-            nonlocal has_content
-            if user_settings.getboolean('ItemOverlay', 'show_notes', fallback=True) and user_note:
-                if has_content: overlay.add_separator()
-                overlay.add_label("Notes", font_size - 1, True, "#5C6370")
-                overlay.add_label(f"✎ {user_note}", font_size, False, "#FFEB3B", 10) 
-                has_content = True
+            if self.user_settings.getboolean('ItemOverlay', 'show_notes', fallback=True) and self.user_note:
+                if self.has_content: self.add_separator()
+                self.add_label("Notes", font_size - 1, True, "#5C6370")
+                self.add_label(f"✎ {self.user_note}", font_size, False, "#FFEB3B", 10) 
+                self.has_content = True
 
         renderers = {
             'price': render_price,
-            'storage': render_storage, # Added
+            'storage': render_storage,
             'trader': render_trader,
             'notes': render_notes,
             'crafting': render_crafting,
@@ -324,7 +335,7 @@ class ItemOverlayUI:
             'salvage': render_salvage
         }
 
-        saved_order_str = user_settings.get('ItemOverlay', 'section_order', fallback="")
+        saved_order_str = self.user_settings.get('ItemOverlay', 'section_order', fallback="")
         if saved_order_str:
             order = [x.strip() for x in saved_order_str.split(',') if x.strip() in renderers]
             for k in renderers:
@@ -335,21 +346,28 @@ class ItemOverlayUI:
         for key in order:
             if key in renderers: renderers[key]()
 
-        overlay.adjustSize()
-        screen_geom = overlay.screen().geometry()
-        cursor_pos = QCursor.pos()
-        overlay_height, overlay_width = overlay.size().height(), overlay.size().width()
-        offset_x = user_settings.getint('ItemOverlay', 'offset_x', fallback=0)
-        offset_y = user_settings.getint('ItemOverlay', 'offset_y', fallback=0)
-        # Base offset is 20px, user adds/subtracts from that
-        pos_x, pos_y = cursor_pos.x() + 20 + offset_x, cursor_pos.y() + 20 + offset_y
+        self.adjustSize()
         
+    def show_smart(self, x=None, y=None):
+        screen_geom = self.screen().geometry()
+        cursor_pos = QCursor.pos()
+        overlay_height, overlay_width = self.size().height(), self.size().width()
+        
+        offset_x = self.user_settings.getint('ItemOverlay', 'offset_x', fallback=0)
+        offset_y = self.user_settings.getint('ItemOverlay', 'offset_y', fallback=0)
+        
+        # If coordinates provided, use them (for testing/forcing), otherwise use cursor
+        if x is None or y is None:
+            # Base offset is 20px, user adds/subtracts from that
+            pos_x, pos_y = cursor_pos.x() + 20 + offset_x, cursor_pos.y() + 20 + offset_y
+        else:
+            pos_x, pos_y = x, y
+            
         if pos_y + overlay_height > screen_geom.height(): pos_y = screen_geom.height() - overlay_height - 10
         if pos_x + overlay_width > screen_geom.width(): pos_x = cursor_pos.x() - overlay_width - 20
         
-        overlay.move(pos_x, pos_y)
-        overlay.show()
-        return overlay
+        self.move(pos_x, pos_y)
+        self.show()
 
 class QuestOverlayUI:
     @staticmethod
