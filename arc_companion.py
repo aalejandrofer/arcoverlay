@@ -302,7 +302,8 @@ class ArcCompanionApp(QObject):
         if not initial:
             self.data_updater.checking_for_updates.connect(lambda: self.progress_hub.settings_tab.set_update_status("Checking..."))
             self.data_updater.download_progress.connect(lambda c, t, f: self.progress_hub.settings_tab.set_update_status(f"Downloading ({c}/{t}): {f}"))
-            self.data_updater.update_complete.connect(lambda s, m: self.progress_hub.settings_tab.set_update_status(m))
+            # Connect to our new handler instead of just setting status
+            self.data_updater.update_complete.connect(self._on_manual_download_complete)
         else:
             self.progress_dialog = QProgressDialog("Connecting...", "Cancel", 0, 0, self.progress_hub)
             self.progress_dialog.setWindowModality(Qt.WindowModality.ApplicationModal); self.progress_dialog.show()
@@ -312,6 +313,28 @@ class ArcCompanionApp(QObject):
         self.data_update_thread.started.connect(self.data_updater.run_check)
         self.data_update_thread.finished.connect(self.data_updater.deleteLater)
         self.data_update_thread.start()
+
+    def _on_manual_download_complete(self, success, message):
+        """Called when a manual update download finishes."""
+        self.progress_hub.settings_tab.set_update_status(message)
+        self.data_update_thread.quit()
+        
+        if success:
+            # Hot Reload: Store state -> Reload -> Restore state
+            try:
+                current_tab_index = self.progress_hub.tabs.currentIndex()
+                was_visible = self.progress_hub.isVisible()
+                
+                self.reload_data_subsystems()
+                
+                if was_visible:
+                    self.progress_hub.show()
+                    self.progress_hub.tabs.setCurrentIndex(current_tab_index)
+                
+                QMessageBox.information(self.progress_hub, "Update Complete", "Data updated and reloaded successfully.")
+            except Exception as e:
+                print(f"Error during hot reload: {e}")
+                QMessageBox.warning(self.progress_hub, "Reload Error", f"Data downloaded, but reload failed: {e}\\nPlease restart the app manually.")
 
     def _on_data_check_finished(self, files, msg):
         if hasattr(self, 'progress_dialog') and self.progress_dialog.isVisible():

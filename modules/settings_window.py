@@ -36,9 +36,10 @@ class SettingsWindow(BasePage):
     DEFAULT_ORDER = ['price', 'storage', 'trader', 'notes', 'crafting', 'hideout', 'project', 'recycle', 'salvage']
     DEFAULT_OCR_COLOR = (249, 238, 223)
 
-    def __init__(self, config_manager, on_save_callback=None):
+    def __init__(self, config_manager, data_manager=None, on_save_callback=None):
         super().__init__("Application Settings") 
         self.cfg = config_manager
+        self.data_manager = data_manager
         self.on_save_callback = on_save_callback
         
         self.start_hotkey_price = ""
@@ -362,7 +363,23 @@ class SettingsWindow(BasePage):
                              with zipf.open(filename) as source, open(target_path, "wb") as target:
                                  shutil.copyfileobj(source, target)
                     
-                    QMessageBox.information(self, "Restore Successful", "Data restored successfully.\nPlease RESTART the application for changes to take effect.")
+                    # --- CRITICAL FIX: Reload in-memory data ---
+                    
+                    # 1. Reload User Progress
+                    if self.data_manager:
+                        self.data_manager.reload_progress()
+                    
+                    # 2. Reload Configuration
+                    self.cfg.load()
+                    
+                    # 3. Reload UI settings
+                    self.load_settings()
+                    
+                    # 4. Trigger global refresh (if callback provided)
+                    if self.on_save_callback:
+                        self.on_save_callback()
+
+                    QMessageBox.information(self, "Restore Successful", "Data restored and reloaded successfully.")
             
         except Exception as e:
             QMessageBox.warning(self, "Restore Failed", f"An error occurred while restoring backup:\n{e}")
@@ -398,8 +415,10 @@ class SettingsWindow(BasePage):
         
         # Offsets
         l_app.addSpacing(5)
-        self.slider_offset_x = self._create_slider(l_app, "Offset X:", -250, 250, 0, "px")
-        self.slider_offset_y = self._create_slider(l_app, "Offset Y:", -250, 250, 0, "px")
+        # Offsets
+        l_app.addSpacing(5)
+        self.slider_offset_x = self._create_slider(l_app, "Offset X:", -1000, 1000, 0, "px", step_scale=50)
+        self.slider_offset_y = self._create_slider(l_app, "Offset Y:", -1000, 1000, 0, "px", step_scale=50)
         
         left_col.addWidget(card_app)
 
@@ -475,11 +494,39 @@ class SettingsWindow(BasePage):
         page = QWidget(); layout = QVBoxLayout(page); layout.setContentsMargins(10, 10, 10, 10); layout.setAlignment(Qt.AlignmentFlag.AlignTop); card = SettingsCard(); l = QVBoxLayout(card); l.setSpacing(10); l.setContentsMargins(10, 10, 10, 10); self.quest_font_size = self._create_slider(l, "Font Size:", 8, 24, 12, "pt"); self.quest_width = self._create_slider(l, "Width:", 200, 600, 350, "px"); self.quest_opacity = self._create_slider(l, "Opacity:", 30, 100, 95, "%"); self.quest_duration = self._create_slider(l, "Duration:", 1, 20, 5, "s", float_scale=True); layout.addWidget(card); return page
 
     # --- HELPERS ---
-    def _create_slider(self, layout, label, min_v, max_v, default, suffix, callback=None, float_scale=False):
-        row = QHBoxLayout(); row.addWidget(QLabel(label, styleSheet="color: #E0E6ED; font-size: 13px; min-width: 80px; border:none; background:transparent;")); val_lbl = QLabel(f"{default}{suffix}"); val_lbl.setFixedWidth(50); val_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter); val_lbl.setStyleSheet("color: #4476ED; font-weight: bold; border:none; background:transparent;"); slider = QSlider(Qt.Orientation.Horizontal); slider.setStyleSheet("QSlider::groove:horizontal { height: 4px; background: #3E4451; border-radius: 2px; } QSlider::handle:horizontal { background: #4476ED; width: 16px; margin: -6px 0; border-radius: 8px; }"); slider.setRange(min_v*10 if float_scale else min_v, max_v*10 if float_scale else max_v); slider.setValue(int(default*10) if float_scale else default)
-        def update_lbl(v): d = v/10.0 if float_scale else v; val_lbl.setText(f"{d:.1f}{suffix}" if float_scale else f"{d}{suffix}"); 
+    def _create_slider(self, layout, label, min_v, max_v, default, suffix, callback=None, float_scale=False, step_scale=1):
+        row = QHBoxLayout()
+        row.addWidget(QLabel(label, styleSheet="color: #E0E6ED; font-size: 13px; min-width: 80px; border:none; background:transparent;"))
+        
+        val_lbl = QLabel(f"{default}{suffix}")
+        val_lbl.setFixedWidth(50)
+        val_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        val_lbl.setStyleSheet("color: #4476ED; font-weight: bold; border:none; background:transparent;")
+        
+        slider = QSlider(Qt.Orientation.Horizontal)
+        slider.setStyleSheet("QSlider::groove:horizontal { height: 4px; background: #3E4451; border-radius: 2px; } QSlider::handle:horizontal { background: #4476ED; width: 16px; margin: -6px 0; border-radius: 8px; }")
+        
+        # Calculate range and default based on scaling
+        real_min = min_v * 10 if float_scale else (min_v // step_scale if step_scale > 1 else min_v)
+        real_max = max_v * 10 if float_scale else (max_v // step_scale if step_scale > 1 else max_v)
+        real_def = int(default * 10) if float_scale else (default // step_scale if step_scale > 1 else default)
+        
+        slider.setRange(real_min, real_max)
+        slider.setValue(real_def)
+        
+        def update_lbl(v): 
+            if float_scale: d = v/10.0
+            elif step_scale > 1: d = v * step_scale
+            else: d = v
+            val_lbl.setText(f"{d:.1f}{suffix}" if float_scale else f"{d}{suffix}")
+            
         if callback: callback()
-        slider.valueChanged.connect(update_lbl); row.addWidget(slider); row.addWidget(val_lbl); layout.addLayout(row); return slider
+        slider.valueChanged.connect(update_lbl)
+        
+        row.addWidget(slider)
+        row.addWidget(val_lbl)
+        layout.addLayout(row)
+        return slider
 
 
     def _create_color_spinbox(self):
@@ -549,8 +596,8 @@ class SettingsWindow(BasePage):
 
         self.item_font_size.setValue(self.cfg.get_item_font_size())
         self.item_duration.setValue(int(self.cfg.get_item_duration() * 10))
-        self.slider_offset_x.setValue(self.cfg.get_item_offset_x())
-        self.slider_offset_y.setValue(self.cfg.get_item_offset_y())
+        self.slider_offset_x.setValue(self.cfg.get_item_offset_x() // 50)
+        self.slider_offset_y.setValue(self.cfg.get_item_offset_y() // 50)
         self.chk_future_hideout.setChecked(self.cfg.get_show_future_hideout())
         self.chk_future_project.setChecked(self.cfg.get_show_future_project())
         
@@ -669,8 +716,8 @@ class SettingsWindow(BasePage):
             self.item_duration.value()/10.0, 
             self.chk_future_hideout.isChecked(), 
             self.chk_future_project.isChecked(),
-            self.slider_offset_x.value(),
-            self.slider_offset_y.value(),
+            self.slider_offset_x.value() * 50,
+            self.slider_offset_y.value() * 50,
             ",".join(new_order),
             section_states
         )

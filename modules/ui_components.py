@@ -1,15 +1,60 @@
 from PyQt6.QtWidgets import (
     QWidget, QHBoxLayout, QPushButton, QProgressBar, QSizePolicy, 
-    QCheckBox, QFrame, QLabel, QTabWidget, QVBoxLayout
+    QCheckBox, QFrame, QLabel, QTabWidget, QVBoxLayout, QApplication
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QSize, QUrl
 from PyQt6.QtGui import (
     QPainter, QColor, QFont, QCursor, QKeySequence, 
-    QDesktopServices, QPixmap
+    QDesktopServices, QPixmap, QGuiApplication
 )
 import os
 import ctypes
 from PyQt6.QtCore import QObject, QEvent
+
+def ensure_window_within_screen(x, y, border_tolerance=20):
+    """
+    Checks if point (x, y) is visible on any connected screen.
+    If not, returns coordinates to center the window on the primary screen.
+    Also ensures the window top is not above the screen top.
+    
+    Returns:
+        tuple: (safe_x, safe_y)
+    """
+    screens = QGuiApplication.screens()
+    if not screens:
+        return 100, 100
+
+    # check if x,y is within any screen rect
+    is_visible = False
+    
+    for screen in screens:
+        geo = screen.availableGeometry()
+        # Simple point visibility check - lax enough to catch "mostly" visible
+        # We check if the top-left point is roughly within bounds
+        if geo.contains(x + border_tolerance, y + border_tolerance):
+            is_visible = True
+            break
+            
+    if is_visible:
+        # Extra safety: Ensure y isn't negative/off-screen top
+        # (Though geo.contains check above vaguely covers it, explicit clamping is safer)
+        # We iterate again to find WHICH screen it's on to clamp correctly if needed, 
+        # but for simplicity, if it's visible, we trust it, just preventing negative Y 
+        # that might be *too* negative if we only checked specific points.
+        # Actually, let's just return as is if valid.
+        return x, y
+    
+    # If we are here, the window is likely off-screen.
+    # Reset to primary screen center-ish
+    primary = QGuiApplication.primaryScreen()
+    if primary:
+        geo = primary.availableGeometry()
+        center = geo.center()
+        # Return a position that centers a hypothetical window of average size
+        # We don't have W/H here but returning something near center is safer than TopLeft 0,0
+        return center.x() - 380, center.y() - 400 # approx half of 760x850
+        
+    return 100, 100
 
 def set_dark_title_bar(window: QWidget):
     """

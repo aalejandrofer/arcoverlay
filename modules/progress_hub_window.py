@@ -9,7 +9,8 @@ from .quest_manager_window import QuestManagerWindow
 from .project_manager_window import ProjectManagerWindow
 from .item_database_window import ItemDatabaseWindow
 from .settings_window import SettingsWindow
-from .ui_components import ClickableBanner, set_dark_title_bar
+from .ui_components import ClickableBanner, set_dark_title_bar, ensure_window_within_screen
+import random
 
 class AboutTab(QWidget):
     def __init__(self, app_version, check_update_func=None):
@@ -152,10 +153,22 @@ class ProgressHubWindow(QWidget):
         # Geometry
         x, y, w, h = self.config_manager.get_window_geometry()
         
+        # Ensure non-zero size defaults
+        if w <= 0: w = 760
+        if h <= 0: h = 850
+        
         if x != -1 and y != -1:
-            self.setGeometry(x, y, w, h)
+            # 1. Validate bound (ensure it's on a screen)
+            safe_x, safe_y = ensure_window_within_screen(x, y)
+            
+            # 2. Resize Content (w, h)
+            self.resize(w, h)
+            
+            # 3. Move Frame (x, y)
+            self.move(safe_x, safe_y)
         else:
             self.resize(w, h)
+
 
         # Banner State
         banner_visible = self.config_manager.get_banner_visible()
@@ -176,7 +189,7 @@ class ProgressHubWindow(QWidget):
         self.quest_tab = QuestManagerWindow(self.data_manager, self.data_manager.user_progress, lang_code=self.lang_code)
         self.project_tab = ProjectManagerWindow(self.data_manager.project_data, self.data_manager.user_progress, self.data_manager, Constants.RARITY_COLORS, lang_code=self.lang_code)
         self.item_db_tab = ItemDatabaseWindow(self.data_manager, lang_code=self.lang_code)
-        self.settings_tab = SettingsWindow(self.config_manager, on_save_callback=settings_callback)
+        self.settings_tab = SettingsWindow(self.config_manager, data_manager=self.data_manager, on_save_callback=settings_callback)
         self.about_tab = AboutTab(app_version, app_update_checker_func)
 
         # Add Tabs
