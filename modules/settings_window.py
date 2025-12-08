@@ -417,13 +417,27 @@ class SettingsWindow(BasePage):
         
         self.item_font_size = self._create_slider(l_app, "Font Size:", 8, 24, 12, "pt", lambda: self.update_preview())
         self.item_duration = self._create_slider(l_app, "Duration:", 1, 10, 3, "s", float_scale=True)
+        self.item_opacity = self._create_slider(l_app, "Opacity:", 20, 100, 98, "%")
         
-        # Offsets
-        l_app.addSpacing(5)
         # Offsets
         l_app.addSpacing(5)
         self.slider_offset_x = self._create_slider(l_app, "Offset X:", -1000, 1000, 0, "px", step_scale=50)
         self.slider_offset_y = self._create_slider(l_app, "Offset Y:", -1000, 1000, 0, "px", step_scale=50)
+
+        # Anchor (Position)
+        from PyQt6.QtWidgets import QComboBox
+        wrapper = QHBoxLayout()
+        wrapper.addWidget(QLabel("Position:", styleSheet="color: #E0E6ED; font-size: 13px; min-width: 80px; border:none; background:transparent;"))
+        self.cmb_anchor = QComboBox()
+        self.cmb_anchor.addItems([
+            "Mouse", 
+            "Top Left", "Top Center", "Top Right", 
+            "Center Left", "Center", "Center Right", 
+            "Bottom Left", "Bottom Center", "Bottom Right"
+        ])
+        self.cmb_anchor.setStyleSheet("QComboBox { background: #2C313C; color: #E0E6ED; border: 1px solid #3E4451; padding: 5px; border-radius: 4px; }")
+        wrapper.addWidget(self.cmb_anchor)
+        l_app.addLayout(wrapper)
         
         left_col.addWidget(card_app)
 
@@ -601,6 +615,13 @@ class SettingsWindow(BasePage):
 
         self.item_font_size.setValue(self.cfg.get_item_font_size())
         self.item_duration.setValue(int(self.cfg.get_item_duration() * 10))
+        self.item_opacity.setValue(self.cfg.get_item_opacity())
+        
+        anchor = self.cfg.get_item_anchor_mode()
+        idx = self.cmb_anchor.findText(anchor)
+        if idx >= 0: self.cmb_anchor.setCurrentIndex(idx)
+        else: self.cmb_anchor.setCurrentIndex(0)
+
         self.slider_offset_x.setValue(self.cfg.get_item_offset_x() // 50)
         self.slider_offset_y.setValue(self.cfg.get_item_offset_y() // 50)
         self.chk_future_hideout.setChecked(self.cfg.get_show_future_hideout())
@@ -632,8 +653,11 @@ class SettingsWindow(BasePage):
         for key in order_list: self.cfg.set('ItemOverlay', self.SECTIONS[key][1], True)
         self.cfg.set('ItemOverlay', 'show_all_future_reqs', True)
         self.cfg.set('ItemOverlay', 'show_all_future_project_reqs', True)
+        self.cfg.set('ItemOverlay', 'show_all_future_project_reqs', True)
         self.cfg.set('ItemOverlay', 'offset_x', 0)
         self.cfg.set('ItemOverlay', 'offset_y', 0)
+        self.cfg.set('ItemOverlay', 'anchor_mode', "Mouse")
+        self.cfg.set('ItemOverlay', 'opacity', 98)
         self.cfg.save()
 
     def reset_current_tab(self):
@@ -725,6 +749,8 @@ class SettingsWindow(BasePage):
             self.chk_future_project.isChecked(),
             self.slider_offset_x.value() * 50,
             self.slider_offset_y.value() * 50,
+            self.cmb_anchor.currentText(),
+            self.item_opacity.value(),
             ",".join(new_order),
             section_states
         )

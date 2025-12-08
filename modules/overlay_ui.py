@@ -130,11 +130,13 @@ class ItemOverlay(BaseOverlay):
         
         offset_x = user_settings.getint('ItemOverlay', 'offset_x', fallback=0)
         offset_y = user_settings.getint('ItemOverlay', 'offset_y', fallback=0)
+        anchor_mode = user_settings.get_str('ItemOverlay', 'anchor_mode', fallback="Mouse")
+        opacity_val = user_settings.getint('ItemOverlay', 'opacity', fallback=98) / 100.0
         
-        # Auto-disable leash if custom offsets are used
-        enable_leash = (offset_x == 0 and offset_y == 0)
+        # Auto-disable leash if custom offsets are used OR if anchor is not Mouse
+        enable_leash = (offset_x == 0 and offset_y == 0 and anchor_mode == "Mouse")
         
-        super().__init__(duration, min_width=min_w, max_width=max_w, enable_distance_close=enable_leash)
+        super().__init__(duration, min_width=min_w, max_width=max_w, opacity=opacity_val, enable_distance_close=enable_leash)
         
         # storage
         self.item_data = item_data
@@ -368,27 +370,44 @@ class ItemOverlay(BaseOverlay):
         
         offset_x = self.user_settings.getint('ItemOverlay', 'offset_x', fallback=0)
         offset_y = self.user_settings.getint('ItemOverlay', 'offset_y', fallback=0)
+        anchor_mode = self.user_settings.get_str('ItemOverlay', 'anchor_mode', fallback="Mouse")
         
-        # If coordinates provided, use them (for testing/forcing), otherwise use cursor
-        if x is None or y is None:
-            # Base offset is 20px, user adds/subtracts from that
-            pos_x, pos_y = cursor_pos.x() + 20 + offset_x, cursor_pos.y() + 20 + offset_y
+        # Determine Base Position
+        if anchor_mode == "Mouse":
+             # Original behavior
+             pos_x, pos_y = cursor_pos.x() + 20 + offset_x, cursor_pos.y() + 20 + offset_y
         else:
-            pos_x, pos_y = x, y
+            # Fixed Anchors
+            # Coordinates relative to the SCREEN (Top Left is 0,0 of that screen)
+            sx, sy, sw, sh = screen_geom.x(), screen_geom.y(), screen_geom.width(), screen_geom.height()
             
-        # Ensure we stay within the TARGET screen's bounds
-        # Check Right Edge
+            # Base aligns
+            if "Top" in anchor_mode: base_y = sy + 20
+            elif "Bottom" in anchor_mode: base_y = sy + sh - overlay_height - 20
+            else: base_y = sy + (sh - overlay_height) // 2 # Center
+            
+            if "Left" in anchor_mode: base_x = sx + 20
+            elif "Right" in anchor_mode: base_x = sx + sw - overlay_width - 20
+            else: base_x = sx + (sw - overlay_width) // 2 # Center
+            
+            # Apply offsets
+            pos_x, pos_y = base_x + offset_x, base_y + offset_y
+
+        # Bounds Checking (Keep fully on screen if possible)
+        # Check Right
         if pos_x + overlay_width > screen_geom.right():
-             pos_x = cursor_pos.x() - overlay_width - 20
-        # Check Bottom Edge
+             pos_x = screen_geom.right() - overlay_width
+        # Check Bottom
         if pos_y + overlay_height > screen_geom.bottom():
-             pos_y = screen_geom.bottom() - overlay_height - 10
-             
-        # Optional: Check Left/Top edges if needed (though usually less critical with +20 offset)
-        if pos_x < screen_geom.left(): pos_x = screen_geom.left() + 10
-        if pos_y < screen_geom.top(): pos_y = screen_geom.top() + 10
+             pos_y = screen_geom.bottom() - overlay_height
+        # Check Left
+        if pos_x < screen_geom.left():
+             pos_x = screen_geom.left()
+        # Check Top
+        if pos_y < screen_geom.top():
+             pos_y = screen_geom.top()
         
-        self.move(pos_x, pos_y)
+        self.move(int(pos_x), int(pos_y))
         self.show()
 
 class QuestOverlayUI:

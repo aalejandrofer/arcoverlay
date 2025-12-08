@@ -23,6 +23,8 @@ class ConfigManager:
     DEFAULT_SHOW_FUTURE_PROJECT = True
     DEFAULT_ITEM_OFFSET_X = 0
     DEFAULT_ITEM_OFFSET_Y = 0
+    DEFAULT_ANCHOR_MODE = "Mouse"
+    DEFAULT_ITEM_OPACITY = 98
     DEFAULT_SECTION_ORDER = "price,storage,trader,notes,crafting,hideout,project,recycle,salvage"
     
     # Quest Overlay Defaults
@@ -103,16 +105,20 @@ class ConfigManager:
     def get_show_future_project(self): return self.get_bool('ItemOverlay', 'show_all_future_project_reqs', self.DEFAULT_SHOW_FUTURE_PROJECT)
     def get_item_offset_x(self): return self.get_int('ItemOverlay', 'offset_x', self.DEFAULT_ITEM_OFFSET_X)
     def get_item_offset_y(self): return self.get_int('ItemOverlay', 'offset_y', self.DEFAULT_ITEM_OFFSET_Y)
+    def get_item_anchor_mode(self): return self.get_str('ItemOverlay', 'anchor_mode', self.DEFAULT_ANCHOR_MODE)
+    def get_item_opacity(self): return self.get_int('ItemOverlay', 'opacity', self.DEFAULT_ITEM_OPACITY)
     def get_overlay_section_order(self): return self.get_str('ItemOverlay', 'section_order', self.DEFAULT_SECTION_ORDER)
     
     def set_item_overlay_settings(self, font_size, duration, show_hideout, show_project, 
-                                  offset_x, offset_y, order_str, section_states):
+                                  offset_x, offset_y, anchor_mode, opacity, order_str, section_states):
         self.set('ItemOverlay', 'font_size', font_size)
         self.set('ItemOverlay', 'duration_seconds', duration)
         self.set('ItemOverlay', 'show_all_future_reqs', show_hideout)
         self.set('ItemOverlay', 'show_all_future_project_reqs', show_project)
         self.set('ItemOverlay', 'offset_x', offset_x)
         self.set('ItemOverlay', 'offset_y', offset_y)
+        self.set('ItemOverlay', 'anchor_mode', anchor_mode)
+        self.set('ItemOverlay', 'opacity', opacity)
         self.set('ItemOverlay', 'section_order', order_str)
         for k, v in section_states.items(): self.set('ItemOverlay', k, v)
 
