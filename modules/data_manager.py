@@ -174,6 +174,8 @@ class DataManager:
         if tracked_only: return sorted([q for q in all_quest_info if q['is_tracked'] and not q['is_completed']], key=lambda q: custom_order.index(q['id']) if q['id'] in custom_order else 999)
         else: return sorted_quests
 
+
+
     def find_trades_for_item(self, item_name: str):
         item = self.get_item_by_name(item_name)
         return self.item_to_trades_map.get(item['id'], []) if item and 'id' in item else []
