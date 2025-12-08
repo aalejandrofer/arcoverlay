@@ -130,7 +130,7 @@ class ItemOverlay(BaseOverlay):
         
         offset_x = user_settings.getint('ItemOverlay', 'offset_x', fallback=0)
         offset_y = user_settings.getint('ItemOverlay', 'offset_y', fallback=0)
-        anchor_mode = user_settings.get_str('ItemOverlay', 'anchor_mode', fallback="Mouse")
+        anchor_mode = user_settings.get('ItemOverlay', 'anchor_mode', fallback="Mouse")
         opacity_val = user_settings.getint('ItemOverlay', 'opacity', fallback=98) / 100.0
         
         # Auto-disable leash if custom offsets are used OR if anchor is not Mouse
@@ -370,7 +370,7 @@ class ItemOverlay(BaseOverlay):
         
         offset_x = self.user_settings.getint('ItemOverlay', 'offset_x', fallback=0)
         offset_y = self.user_settings.getint('ItemOverlay', 'offset_y', fallback=0)
-        anchor_mode = self.user_settings.get_str('ItemOverlay', 'anchor_mode', fallback="Mouse")
+        anchor_mode = self.user_settings.get('ItemOverlay', 'anchor_mode', fallback="Mouse")
         
         # Determine Base Position
         if anchor_mode == "Mouse":
