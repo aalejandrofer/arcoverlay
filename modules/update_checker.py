@@ -3,11 +3,12 @@ import requests
 import json
 import os
 from .constants import Constants
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
-# The URL for the GitHub API to get the file tree of the repository
-GITHUB_API_URL = "https://api.github.com/repos/Joopz0r/arcraiders-data/git/trees/main?recursive=1"
 # The base URL for downloading the raw file content
 GITHUB_RAW_URL = "https://raw.githubusercontent.com/Joopz0r/arcraiders-data/main/"
+# URL for the raw versions.json manifest, bypassing Git Tree API limits
+REMOTE_MANIFEST_URL = "https://raw.githubusercontent.com/Joopz0r/arcraiders-data/main/versions.json"
 
 # --- MODIFIED: Added maps.json to managed paths ---
 MANAGED_PATHS = [
@@ -51,67 +52,98 @@ class UpdateChecker(QObject):
         self.checking_for_updates.emit()
         
         try:
-            response = requests.get(GITHUB_API_URL, timeout=10)
+            # Download the raw versions.json directly to bypass API rate limits
+            response = requests.get(REMOTE_MANIFEST_URL, timeout=10)
             response.raise_for_status()
-            remote_files = response.json()
+            remote_versions_map = response.json()
         except requests.exceptions.RequestException as e:
             self.update_check_finished.emit([], f"Error: Could not connect to GitHub. ({e})")
             return
+        except json.JSONDecodeError:
+            self.update_check_finished.emit([], "Error: Invalid version data received.")
+            return
 
-        remote_versions = {}
-        for file_info in remote_files.get('tree', []):
-            path = file_info.get('path')
-            if file_info.get('type') == 'blob' and any(path.startswith(p) for p in MANAGED_PATHS):
-                remote_versions[path] = file_info.get('sha')
-        
         files_to_download = []
-        for path, remote_sha in remote_versions.items():
-            local_sha = self.local_versions.get(path)
-            if local_sha != remote_sha:
-                files_to_download.append({'path': path, 'sha': remote_sha})
+        
+        # The raw versions.json is a simple flat dictionary ({"path": "hash"})
+        if isinstance(remote_versions_map, dict):
+            for path, remote_sha in remote_versions_map.items():
+                # Filter by managed paths
+                if any(path.startswith(p) for p in MANAGED_PATHS):
+                    local_sha = self.local_versions.get(path)
+                    if local_sha != remote_sha:
+                        files_to_download.append({'path': path, 'sha': remote_sha})
         
         if not files_to_download:
             self.update_check_finished.emit([], "You are up to date!")
         else:
             self.update_check_finished.emit(files_to_download, f"{len(files_to_download)} new or updated files found.")
 
-    def download_updates(self, files_to_download):
-        """Downloads the list of files provided by the check."""
-        total_files = len(files_to_download)
-        for i, file_info in enumerate(files_to_download):
-            path = file_info['path']
-            sha = file_info['sha']
-            self.download_progress.emit(i + 1, total_files, os.path.basename(path))
-
-            try:
-                download_url = GITHUB_RAW_URL + path
-                file_content_response = requests.get(download_url, timeout=10)
-                file_content_response.raise_for_status()
-
-                # Construct local save path
-                local_path = os.path.join(Constants.DATA_DIR, path)
-
-                dir_name = os.path.dirname(local_path)
-                if not os.path.exists(dir_name):
-                    os.makedirs(dir_name)
-
-                with open(local_path, 'wb') as f:
-                    f.write(file_content_response.content)
-                
-                # The key in our versions file should still be the GitHub path for future checks
-                self.local_versions[path] = sha
-
-            except requests.exceptions.RequestException as e:
-                self.update_complete.emit(False, f"Error downloading {path}: {e}")
-                return
-
-        versions_path = os.path.join(Constants.DATA_DIR, 'versions.json')
+    def _download_single_file(self, file_info):
+        """Helper to download a single file. Returns (success, path, error_msg/None)."""
+        path = file_info['path']
+        request_url = GITHUB_RAW_URL + path
         try:
-            with open(versions_path, 'w', encoding='utf-8') as f:
-                json.dump(self.local_versions, f, indent=2)
-            self.update_complete.emit(True, "Update successful! Please restart the application for changes to take effect.")
-        except IOError as e:
-            self.update_complete.emit(False, f"Error saving new version file: {e}")
+            response = requests.get(request_url, timeout=10)
+            response.raise_for_status()
+            
+            local_path = os.path.join(Constants.DATA_DIR, path)
+            dir_name = os.path.dirname(local_path)
+            if not os.path.exists(dir_name):
+                os.makedirs(dir_name, exist_ok=True)
+                
+            with open(local_path, 'wb') as f:
+                f.write(response.content)
+            
+            return True, path, None
+        except Exception as e:
+            return False, path, str(e)
+
+    def download_updates(self, files_to_download):
+        """Downloads the list of files provided by the check using parallel threads."""
+        total_files = len(files_to_download)
+        
+        # Use ThreadPoolExecutor for parallel downloads
+        # Limiting max_workers to 8 to avoid overwhelming the network or system
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            # Create a map of future -> file_info
+            future_to_file = {
+                executor.submit(self._download_single_file, f): f 
+                for f in files_to_download
+            }
+            
+            completed_count = 0
+            errors = []
+            
+            for future in as_completed(future_to_file):
+                completed_count += 1
+                success, path, error_msg = future.result()
+                
+                # Emit progress for each completed file
+                self.download_progress.emit(completed_count, total_files, os.path.basename(path))
+                
+                if success:
+                    # Update local version only on success
+                    # Need to find the sha for this path
+                    for item in files_to_download:
+                        if item['path'] == path:
+                            self.local_versions[path] = item['sha']
+                            break
+                else:
+                    errors.append(f"{path}: {error_msg}")
+
+        if errors:
+            # If there were errors, show the first one (or a summary)
+            self.update_complete.emit(False, f"Failed to download {len(errors)} files. First error: {errors[0]}")
+        else:
+            # Save the new versions.json
+            versions_path = os.path.join(Constants.DATA_DIR, 'versions.json')
+            try:
+                with open(versions_path, 'w', encoding='utf-8') as f:
+                    json.dump(self.local_versions, f, indent=2)
+                self.update_complete.emit(True, "Update successful! Please restart the application for changes to take effect.")
+            except IOError as e:
+                self.update_complete.emit(False, f"Error saving new version file: {e}")
 
     def download_language(self, lang_code):
         """Downloads a specific Tesseract language file."""

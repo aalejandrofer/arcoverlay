@@ -135,6 +135,7 @@ class ArcCompanionApp(QObject):
         self.progress_hub.settings_tab.request_data_update.connect(self.run_manual_data_check)
         self.progress_hub.settings_tab.request_lang_download.connect(self.run_lang_download)
         self.progress_hub.settings_tab.request_app_update.connect(lambda: self.check_for_app_updates(manual=True))
+        self.progress_hub.settings_tab.hotkeys_updated.connect(self.restart_hotkeys)
 
         self.progress_hub.show()
         
@@ -181,6 +182,22 @@ class ArcCompanionApp(QObject):
         self.hotkey_worker.hub_triggered.connect(self.restore_app)
         self.hotkey_thread.started.connect(self.hotkey_worker.run)
         self.hotkey_thread.start()
+
+    def restart_hotkeys(self):
+        print("Restarting hotkey service...")
+        # 1. Stop existing
+        if hasattr(self, 'hotkey_worker') and self.hotkey_worker:
+            self.hotkey_worker.stop()
+        
+        if hasattr(self, 'hotkey_thread') and self.hotkey_thread:
+            if self.hotkey_thread.isRunning():
+                self.hotkey_thread.quit()
+                self.hotkey_thread.wait()
+        
+        # 2. Re-create thread (QThreads are one-shot)
+        self.hotkey_thread = QThread()
+        self._start_hotkey_service()
+        print("Hotkey service restarted.")
 
     def show_settings_tab(self):
         self.progress_hub.show()

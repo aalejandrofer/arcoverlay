@@ -56,29 +56,49 @@ class ImageProcessor:
         try:
             with mss.mss() as sct:
                 # --- 1. Determine Capture Region ---
+                # --- 1. Determine Capture Region ---
                 if full_screen:
-                    # Monitor 1 is usually the Primary Monitor
+                    # Monitor 1 is usually the Primary Monitor (default fallback)
                     monitor_region = sct.monitors[1]
+                    
+                    # Attempt to find which monitor the mouse is on
+                    pt = ctypes.wintypes.POINT()
+                    ctypes.windll.user32.GetCursorPos(ctypes.byref(pt))
+                    
+                    # Iterate over all monitors (skipping index 0 which is 'all monitors combined')
+                    for i, monitor in enumerate(sct.monitors[1:], start=1):
+                        # mss monitor dict keys: 'left', 'top', 'width', 'height'
+                        m_left = monitor["left"]
+                        m_top = monitor["top"]
+                        m_right = m_left + monitor["width"]
+                        m_bottom = m_top + monitor["height"]
+                        
+                        if m_left <= pt.x < m_right and m_top <= pt.y < m_bottom:
+                            monitor_region = monitor
+                            break
                 else:
                     # Capture around cursor
                     pt = ctypes.wintypes.POINT()
                     ctypes.windll.user32.GetCursorPos(ctypes.byref(pt))
                     
-                    screen_width = int(ctypes.windll.user32.GetSystemMetrics(0))
-                    screen_height = int(ctypes.windll.user32.GetSystemMetrics(1))
+                    # Fallback system metrics usually return primary screen size
+                    # For multi-monitor "around cursor", we just need valid global coordinates
+                    # mss handles global coordinates fine without needing specific monitor index
                     
                     search_width, search_height = 1200, 1200
                     
                     left = int(max(0, pt.x - search_width // 2))
                     top = int(max(0, pt.y - search_height // 2))
-                    right = int(min(screen_width, pt.x + search_width // 2))
-                    bottom = int(min(screen_height, pt.y + search_height // 2))
+                    # Note: We can't easily clamp 'right'/'bottom' to a specific monitor without knowing which one,
+                    # but mss handles out-of-bounds gracefully usually. 
+                    # For safety, we can just define the rect without clamping to screen_width/height 
+                    # (since that was only primary monitor anyway).
                     
                     monitor_region = {
                         "top": top,
                         "left": left,
-                        "width": right - left,
-                        "height": bottom - top
+                        "width": search_width,
+                        "height": search_height
                     }
 
                 # --- 2. Capture (Raw Bytes) ---

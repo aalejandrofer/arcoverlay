@@ -20,6 +20,7 @@ class SettingsWindow(BasePage):
     request_data_update = pyqtSignal()
     request_lang_download = pyqtSignal(str)
     request_app_update = pyqtSignal()
+    hotkeys_updated = pyqtSignal()
     
     SECTIONS = {
         'price': ('Price', 'show_price'),
@@ -681,8 +682,13 @@ class SettingsWindow(BasePage):
             self.quest_duration.value()/10.0
         )
         
-        self.cfg.save() 
-        if self.hotkey_btn.current_key_string != self.start_hotkey_price or self.quest_hotkey_btn.current_key_string != self.start_hotkey_quest or self.hub_hotkey_btn.current_key_string != self.start_hotkey_hub: QMessageBox.information(self, "Restart Required", "Hotkeys updated. Please restart the app.")
+        self.cfg.save()
+        if self.hotkey_btn.current_key_string != self.start_hotkey_price or self.quest_hotkey_btn.current_key_string != self.start_hotkey_quest or self.hub_hotkey_btn.current_key_string != self.start_hotkey_hub:
+             self.start_hotkey_price = self.hotkey_btn.current_key_string
+             self.start_hotkey_quest = self.quest_hotkey_btn.current_key_string
+             self.start_hotkey_hub = self.hub_hotkey_btn.current_key_string
+             self.hotkeys_updated.emit()
+
         if self.on_save_callback: self.on_save_callback()
         QMessageBox.information(self, "Saved", "Settings saved successfully.")
 

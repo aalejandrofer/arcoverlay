@@ -349,8 +349,15 @@ class ItemOverlay(BaseOverlay):
         self.adjustSize()
         
     def show_smart(self, x=None, y=None):
-        screen_geom = self.screen().geometry()
+        from PyQt6.QtGui import QGuiApplication
+        
         cursor_pos = QCursor.pos()
+        target_screen = QGuiApplication.screenAt(cursor_pos)
+        if not target_screen:
+            target_screen = QGuiApplication.primaryScreen()
+            
+        screen_geom = target_screen.geometry()
+        
         overlay_height, overlay_width = self.size().height(), self.size().width()
         
         offset_x = self.user_settings.getint('ItemOverlay', 'offset_x', fallback=0)
@@ -363,8 +370,17 @@ class ItemOverlay(BaseOverlay):
         else:
             pos_x, pos_y = x, y
             
-        if pos_y + overlay_height > screen_geom.height(): pos_y = screen_geom.height() - overlay_height - 10
-        if pos_x + overlay_width > screen_geom.width(): pos_x = cursor_pos.x() - overlay_width - 20
+        # Ensure we stay within the TARGET screen's bounds
+        # Check Right Edge
+        if pos_x + overlay_width > screen_geom.right():
+             pos_x = cursor_pos.x() - overlay_width - 20
+        # Check Bottom Edge
+        if pos_y + overlay_height > screen_geom.bottom():
+             pos_y = screen_geom.bottom() - overlay_height - 10
+             
+        # Optional: Check Left/Top edges if needed (though usually less critical with +20 offset)
+        if pos_x < screen_geom.left(): pos_x = screen_geom.left() + 10
+        if pos_y < screen_geom.top(): pos_y = screen_geom.top() + 10
         
         self.move(pos_x, pos_y)
         self.show()
