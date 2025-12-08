@@ -653,7 +653,6 @@ class SettingsWindow(BasePage):
         for key in order_list: self.cfg.set('ItemOverlay', self.SECTIONS[key][1], True)
         self.cfg.set('ItemOverlay', 'show_all_future_reqs', True)
         self.cfg.set('ItemOverlay', 'show_all_future_project_reqs', True)
-        self.cfg.set('ItemOverlay', 'show_all_future_project_reqs', True)
         self.cfg.set('ItemOverlay', 'offset_x', 0)
         self.cfg.set('ItemOverlay', 'offset_y', 0)
         self.cfg.set('ItemOverlay', 'anchor_mode', "Mouse")
@@ -700,6 +699,8 @@ class SettingsWindow(BasePage):
         self.item_duration.setValue(int(self.cfg.DEFAULT_ITEM_DURATION * 10))
         self.slider_offset_x.setValue(self.cfg.DEFAULT_ITEM_OFFSET_X)
         self.slider_offset_y.setValue(self.cfg.DEFAULT_ITEM_OFFSET_Y)
+        self.item_opacity.setValue(self.cfg.DEFAULT_ITEM_OPACITY)
+        self.cmb_anchor.setCurrentText(self.cfg.DEFAULT_ANCHOR_MODE)
         
         self.chk_future_hideout.setChecked(self.cfg.DEFAULT_SHOW_FUTURE_HIDEOUT)
         self.chk_future_project.setChecked(self.cfg.DEFAULT_SHOW_FUTURE_PROJECT)
