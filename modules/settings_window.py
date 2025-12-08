@@ -425,6 +425,8 @@ class SettingsWindow(BasePage):
         self.slider_offset_x = self._create_slider(l_app, "Offset X:", -1000, 1000, 0, "px", step_scale=50)
         self.slider_offset_y = self._create_slider(l_app, "Offset Y:", -1000, 1000, 0, "px", step_scale=50)
         
+        self.slider_leash = self._create_slider(l_app, "Leash Dist:", 300, 3000, 500, "px", step_scale=50)
+        
         left_col.addWidget(card_app)
 
         # Modifiers Card
@@ -603,6 +605,7 @@ class SettingsWindow(BasePage):
         self.item_duration.setValue(int(self.cfg.get_item_duration() * 10))
         self.slider_offset_x.setValue(self.cfg.get_item_offset_x() // 50)
         self.slider_offset_y.setValue(self.cfg.get_item_offset_y() // 50)
+        self.slider_leash.setValue(self.cfg.get_item_leash_distance() // 50)
         self.chk_future_hideout.setChecked(self.cfg.get_show_future_hideout())
         self.chk_future_project.setChecked(self.cfg.get_show_future_project())
         
@@ -723,6 +726,7 @@ class SettingsWindow(BasePage):
             self.chk_future_project.isChecked(),
             self.slider_offset_x.value() * 50,
             self.slider_offset_y.value() * 50,
+            self.slider_leash.value() * 50,
             ",".join(new_order),
             section_states
         )

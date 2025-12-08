@@ -147,10 +147,13 @@ class ArcCompanionApp(QObject):
         self.tray.show()
 
         self.hotkey_thread = QThread()
-        self._start_hotkey_service()
-
         # 6. Startup Checks
-        self.ensure_data_exists()
+        if self.ensure_data_exists():
+            self.start_background_services()
+
+    def start_background_services(self):
+        """Starts hotkeys and app update checks after data is verified."""
+        self._start_hotkey_service()
         self.check_for_app_updates(manual=False)
 
     def on_tray_icon_activated(self, reason):
@@ -287,7 +290,11 @@ class ArcCompanionApp(QObject):
             msg = QMessageBox(self.progress_hub if hasattr(self, 'progress_hub') else None)
             msg.setWindowTitle("Missing Data"); msg.setText("Missing data. Download now?")
             msg.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-            if msg.exec() == QMessageBox.StandardButton.Yes: self.run_manual_data_check(initial=True)
+            if msg.exec() == QMessageBox.StandardButton.Yes: 
+                self.run_manual_data_check(initial=True)
+                return False
+            return False # User said no, but data is still missing
+        return True
 
     def run_manual_data_check(self, initial=False):
         if hasattr(self, 'data_update_thread') and self.data_update_thread.isRunning(): return
@@ -365,7 +372,9 @@ class ArcCompanionApp(QObject):
 
     def _on_initial_complete(self, success, message):
         self.progress_dialog.close(); self.data_update_thread.quit()
-        if success: self.reload_data_subsystems()
+        if success: 
+            self.reload_data_subsystems()
+            self.start_background_services()
         else: QMessageBox.critical(self.progress_hub, "Failed", message)
 
     def reload_data_subsystems(self):

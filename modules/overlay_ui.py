@@ -6,7 +6,7 @@ import math
 from .constants import Constants
 
 class BaseOverlay(QWidget):
-    def __init__(self, duration_ms, min_width=None, max_width=None, opacity=0.98, enable_distance_close=True):
+    def __init__(self, duration_ms, min_width=None, max_width=None, opacity=0.98, enable_distance_close=True, close_threshold=350):
         super().__init__()
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint | 
@@ -60,7 +60,7 @@ class BaseOverlay(QWidget):
             self.mouse_monitor_timer.timeout.connect(self.check_mouse_distance)
             self.mouse_monitor_timer.start(100) 
         
-        self.close_threshold = 350 
+        self.close_threshold = close_threshold 
 
     def check_mouse_distance(self):
         mouse_pos = QCursor.pos()
@@ -128,7 +128,9 @@ class ItemOverlay(BaseOverlay):
         min_w = max(280, font_size * 25)
         max_w = max(400, font_size * 35)
         
-        super().__init__(duration, min_width=min_w, max_width=max_w, enable_distance_close=True)
+        leash_dist = user_settings.getint('ItemOverlay', 'leash_distance', fallback=500)
+        
+        super().__init__(duration, min_width=min_w, max_width=max_w, enable_distance_close=True, close_threshold=leash_dist)
         
         # storage
         self.item_data = item_data
