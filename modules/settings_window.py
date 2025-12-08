@@ -21,6 +21,8 @@ class SettingsWindow(BasePage):
     request_lang_download = pyqtSignal(str)
     request_app_update = pyqtSignal()
     hotkeys_updated = pyqtSignal()
+    progress_saved = pyqtSignal() # Add this if missing from original file, based on usage in ProgressHubWindow
+    data_restored = pyqtSignal()
     
     SECTIONS = {
         'price': ('Price', 'show_price'),
@@ -379,6 +381,9 @@ class SettingsWindow(BasePage):
                     if self.on_save_callback:
                         self.on_save_callback()
 
+                    # 5. Emit restored signal
+                    self.data_restored.emit()
+                    
                     QMessageBox.information(self, "Restore Successful", "Data restored and reloaded successfully.")
             
         except Exception as e:

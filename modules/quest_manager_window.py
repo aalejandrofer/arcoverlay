@@ -235,3 +235,36 @@ class QuestManagerWindow(BasePage):
         
         # Use DataManager's save method to preserve all progress data (including item_notes)
         self.data_manager.save_user_progress()
+
+    def reload_data(self):
+        """Reloads UI state from the current data_manager.user_progress."""
+        self.quest_order = self.data_manager.user_progress.get('quest_order', [])
+        # Fallback if empty or missing ids
+        all_ids = [q.get('id') for q in self.all_quests_data]
+        if not self.quest_order: 
+            self.quest_order = all_ids
+        for q_id in all_ids:
+            if q_id not in self.quest_order: self.quest_order.append(q_id)
+            
+        # Update widgets WITHOUT triggering the write-back in rebuild_and_refresh_ui
+        # We update the widgets to match the data, then call rebuild which will sync them back (no-op effectively)
+        for q_id, widgets in self.quest_widgets.items():
+            prog = self.data_manager.user_progress['quests'].get(q_id, {})
+            
+            # Update Track Checkbox (block signals to prevent auto-save triggering)
+            widgets['track_chk'].blockSignals(True)
+            widgets['track_chk'].setChecked(prog.get('is_tracked', False))
+            widgets['track_chk'].blockSignals(False)
+            
+            # Update Objectives
+            comp_objs = prog.get('objectives_completed', [])
+            for obj in widgets['objs']:
+                obj['checkbox'].blockSignals(True)
+                obj['checkbox'].setChecked(obj['text'] in comp_objs)
+                obj['checkbox'].blockSignals(False)
+                
+                # Manually trigger style update
+                is_checked = obj['checkbox'].isChecked()
+                obj['label'].setStyleSheet("color: #5C6370; text-decoration: line-through;" if is_checked else "color: #E0E6ED;")
+
+        self.rebuild_and_refresh_ui()

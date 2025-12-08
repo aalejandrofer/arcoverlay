@@ -200,6 +200,9 @@ class ProgressHubWindow(QWidget):
         self.tabs.addTab(self.settings_tab, "Settings")
         self.tabs.addTab(self.about_tab, "About")
         
+        # Connect signals
+        self.settings_tab.data_restored.connect(self.on_data_restored)
+
         # --- CONNECT SIGNALS FOR AUTO-SAVE ---
         # When any tab triggers an auto-save, we emit our own signal
         self.hideout_tab.progress_saved.connect(self.progress_saved.emit)
@@ -217,6 +220,12 @@ class ProgressHubWindow(QWidget):
         self.tabs.currentChanged.connect(self.update_reset_button)
         self.update_reset_button(self.tabs.currentIndex())
         self.hide()
+
+    def on_data_restored(self):
+        """Called when data is restored from backup. Reloads all tabs."""
+        self.hideout_tab.reload_data()
+        self.quest_tab.reload_data()
+        self.project_tab.reload_data()
 
     def update_reset_button(self, index):
         current_widget = self.tabs.widget(index)

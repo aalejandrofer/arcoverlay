@@ -352,3 +352,18 @@ class ProjectManagerWindow(BasePage):
         
         # Use DataManager's save method to preserve all progress data (including item_notes)
         self.data_manager.save_user_progress()
+
+    def reload_data(self):
+        """Reloads UI state from the current data_manager.user_progress."""
+        # 1. Update Inventory Widgets
+        for (p_id, p_num, item_id), widget in self.inventory_widgets.items():
+            val = self.data_manager.user_progress.get('projects', {}).get(p_id, {}).get('inventory', {}).get(str(p_num), {}).get(item_id, 0)
+            widget.set_value(val)
+            
+        # 2. Update Category Widgets
+        for (p_id, p_num, category_name), widget in self.category_widgets.items():
+            val = self.data_manager.user_progress.get('projects', {}).get(p_id, {}).get('categories', {}).get(str(p_num), {}).get(category_name, 0)
+            widget.set_value(val)
+            
+        # 3. Refresh Phases visibility (which checks completed_phase)
+        self.refresh_visibility()

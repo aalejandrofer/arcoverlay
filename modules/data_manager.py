@@ -102,7 +102,9 @@ class DataManager:
         except Exception as e: print(f"Error saving progress: {e}")
 
     def reload_progress(self): 
-        self.user_progress = self._load_json(Constants.PROGRESS_FILE, {})
+        new_data = self._load_json(Constants.PROGRESS_FILE, {})
+        self.user_progress.clear()
+        self.user_progress.update(new_data)
         if 'stash_inventory' not in self.user_progress: self.user_progress['stash_inventory'] = {}
         self._backup_progress()
     

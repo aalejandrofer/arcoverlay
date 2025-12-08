@@ -271,3 +271,26 @@ class HideoutManagerWindow(BasePage):
         
         # Use DataManager's save method to preserve all progress data (including item_notes)
         self.data_manager.save_user_progress()
+
+    def reload_data(self):
+        """Reloads UI state from the current data_manager.user_progress."""
+        # 1. Update station order
+        self.station_order = self.data_manager.user_progress.get('hideout_station_order', [s['id'] for s in self.raw_hideout_data])
+        
+        # 2. Update Levels
+        for sid in self.station_widgets.keys():
+            self.station_current_levels[sid] = self.data_manager.user_progress.get(sid, 0)
+            
+        # 3. Update Inventory Widgets
+        for key, widget in self.inventory_widgets.items():
+            s_id, lvl, i_id = key
+            val = self.data_manager.user_progress.get('hideout_inventory', {}).get(s_id, {}).get(str(lvl), {}).get(i_id, 0)
+            widget.set_value(val)
+            
+        # 4. Update Expanded States
+        expanded_states = self.data_manager.user_progress.get('hideout_station_expanded', {})
+        for sid, widgets in self.station_widgets.items():
+            is_expanded = expanded_states.get(sid, self.all_expanded)
+            widgets['toggle_btn'].setChecked(is_expanded)
+            
+        self.refresh_ui()
