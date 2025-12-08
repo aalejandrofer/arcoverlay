@@ -331,10 +331,12 @@ class ArcCompanionApp(QObject):
             try:
                 current_tab_index = self.progress_hub.tabs.currentIndex()
                 was_visible = self.progress_hub.isVisible()
+                saved_geometry = self.progress_hub.saveGeometry()
                 
                 self.reload_data_subsystems()
                 
                 if was_visible:
+                    self.progress_hub.restoreGeometry(saved_geometry)
                     self.progress_hub.show()
                     self.progress_hub.tabs.setCurrentIndex(current_tab_index)
                 
@@ -382,7 +384,15 @@ class ArcCompanionApp(QObject):
         self.scanner = ItemScanner(self.cmd_config, self.data_manager)
         self.progress_hub.cleanup()
         self.progress_hub = ProgressHubWindow(self.data_manager, self.config_manager, self.reload_settings, APP_VERSION, lambda: self.check_for_app_updates(manual=True), lang_code=self.json_lang_code)
-        # NOTE: Do NOT connect to reload_progress - see comment in __init__
+        
+        # --- RE-CONNECT SIGNALS ---
+        # Critical for hot reload: Re-attach buttons to their handlers
+        self.progress_hub.settings_tab.request_data_update.connect(self.run_manual_data_check)
+        self.progress_hub.settings_tab.request_lang_download.connect(self.run_lang_download)
+        self.progress_hub.settings_tab.request_app_update.connect(lambda: self.check_for_app_updates(manual=True))
+        self.progress_hub.settings_tab.hotkeys_updated.connect(self.restart_hotkeys)
+        # --------------------------
+        
         self._build_tray_menu()
 
     def check_for_app_updates(self, manual=False):

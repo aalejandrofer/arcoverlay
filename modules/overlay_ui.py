@@ -128,9 +128,13 @@ class ItemOverlay(BaseOverlay):
         min_w = max(280, font_size * 25)
         max_w = max(400, font_size * 35)
         
-        leash_dist = user_settings.getint('ItemOverlay', 'leash_distance', fallback=500)
+        offset_x = user_settings.getint('ItemOverlay', 'offset_x', fallback=0)
+        offset_y = user_settings.getint('ItemOverlay', 'offset_y', fallback=0)
         
-        super().__init__(duration, min_width=min_w, max_width=max_w, enable_distance_close=True, close_threshold=leash_dist)
+        # Auto-disable leash if custom offsets are used
+        enable_leash = (offset_x == 0 and offset_y == 0)
+        
+        super().__init__(duration, min_width=min_w, max_width=max_w, enable_distance_close=enable_leash)
         
         # storage
         self.item_data = item_data
