@@ -290,13 +290,35 @@ class ItemOverlay(BaseOverlay):
         def render_project():
             if not self.user_settings.getboolean('ItemOverlay', 'show_project_reqs', fallback=True): return
             show_future = self.user_settings.getboolean('ItemOverlay', 'show_all_future_project_reqs', fallback=False)
-            filtered_reqs = [r for r in self.project_reqs if r[1] == 'next' or show_future] if self.project_reqs else []
+            
+            # Handle both old format (2-tuple) and new format (4-tuple)
+            filtered_reqs = []
+            if self.project_reqs:
+                for req in self.project_reqs:
+                    if len(req) >= 4:
+                        # New format: (display_str, req_type, is_complete, needed_qty)
+                        req_str, req_type, is_complete, needed_qty = req[0], req[1], req[2], req[3]
+                        if req_type == 'next' or show_future:
+                            filtered_reqs.append((req_str, req_type, is_complete, needed_qty))
+                    else:
+                        # Old format: (display_str, req_type) - for backwards compatibility
+                        req_str, req_type = req[0], req[1]
+                        if req_type == 'next' or show_future:
+                            filtered_reqs.append((req_str, req_type, False, 0))
+            
             if filtered_reqs:
                 if self.has_content: self.add_separator()
                 self.add_label("Project Request:", font_size - 1, True, "#5C6370")
-                for req_str, req_type in filtered_reqs:
-                    color = "#98C379" if req_type == 'next' else "#D19A66" 
-                    self.add_label(f"■ {req_str}", font_size, False, color, 10)
+                for req_data in filtered_reqs:
+                    req_str, req_type, is_complete, needed_qty = req_data
+                    if is_complete:
+                        # Show with green tick for completed requirements
+                        color = "#4CAF50"  # Green
+                        display_text = f"■ {req_str} <span style='color:#4CAF50'>✓</span>"
+                    else:
+                        color = "#98C379" if req_type == 'next' else "#D19A66" 
+                        display_text = f"■ {req_str}"
+                    self.add_label(display_text, font_size, False, color, 10)
                 self.has_content = True
 
         def render_recycle():

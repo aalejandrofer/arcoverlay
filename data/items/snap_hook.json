@@ -90,8 +90,8 @@
     }
   },
   "recipe": {
-    "rope": 3,
     "power_rod": 2,
+    "rope": 3,
     "exodus_modules": 1
   },
   "recyclesInto": {
@@ -99,6 +99,6 @@
     "rope": 3
   },
   "craftBench": "utility_bench",
-  "updatedAt": "11/20/2025",
+  "updatedAt": "12/07/2025",
   "stackSize": 1
 }

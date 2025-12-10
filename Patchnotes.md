@@ -1,56 +1,42 @@
 V1.3.0
-**Item Overlay Enhancements**
-- Added drag-and-drop reordering for overlay sections in settings
-- Overlay sections now display in custom user-defined order
-- Settings checkboxes now display green ticks when enabled
-- Improved live preview of overlay appearance in settings
-- Item overlay can now display how much you have in storage
-- Added toggle for ultra-wide monitors
-- Added color picker for OCR color
+**New Features & Major Improvements**
+- **Backup System**: New Backup/Restore tab in settings to save and load your progress/config.
+- **Hyperspeed OCR**: Optimized text recognition engine for significantly faster and more accurate tooltip reading.
+- **Live Settings**: Adjusting hotkeys or overlay settings (like transparency) now updates instantly.
+- **Anchor Mode**: Option to pin the Item Overlay to a fixed position (e.g., Top Left) instead of the mouse.
+- **Opacity Slider**: Control the transparency of the Item Overlay background.
 
-**Quest Overlay Enhancements**
-- Added Map names for quests
-- Added search bar for quests
-- Added map filters for quests
+**Item Overlay Enhancements**
+- Added drag-and-drop reordering for overlay sections
+- Item overlay can now display storage quantities
+- Added color picker for OCR color
+- Roman Numeral OCR Fix (Il -> II, etc.)
+- Smart Tooltip Cropping & Language Filtering for better performance
+
+**Quest & Hideout Management**
+- **Quest Overlay**: Added map names, search bar, and map filters.
+- **Hideout Manager**: Remembers section states (open/closed) between sessions. Clearly shows when no upgrades are available.
 
 **Item Database**
-- Added quick filter buttons for Blueprints and Storage
-- Blueprint progress now shown as "Collected/Total" counter
-- Enhanced blueprint collection tracking with visual indicators
-- Added storage tracking with visual indicators
-- Added dedicated inspector panel for item details
-- Improved item search with multi-language support
-- Added filtering by: Tracked, Storage, Quest Requirements, Hideout Requirements, Project Requirements
-- Added item requirement details showing which quests/hideout/projects need each item
-
-**Language & Localization**
-- Fixed overlay text to display in selected language for all item information
-- Improved language file handling and download process
-- Enhanced multi-language search capabilities
-
-**OCR & Performance**
-- Optimized tooltip OCR for faster and more reliable captures
-- Pre-loading Tesseract worker for improved performance
-- Cropped tooltip processing to header section only
-- Fixed screenshot path handling on Windows
-- added support for widescreen monitors
-- added more debug options and settings for OCR
+- Added quick filter buttons (Blueprints, Storage)
+- Blueprint progress counter and collection tracking
+- Dedicated inspector panel for item details
+- Improved filtering (Tracked, Requirements) and multi-language search
 
 **UI/UX Improvements**
-- Reorganized settings into tabbed interface (General, Item Overlay, Quest Overlay)
-- Improved visual styling for better contrast and readability
-- Added separator lines between overlay sections
-- Enhanced item cards with rarity-based color coding
-- Added toggle for top banner in progress hub
-- Added Phase 5 to expeditions
+- **Theming**: applied Dark Theme to all popups and dialogs.
+- **Progress Hub**: Added Reset buttons that properly clear data and refresh the UI.
+- **Window**: Prevented window from getting stuck off-screen or resetting position unexpectedly.
+- **Settings**: Reorganized into a tabbed interface; "Reset" button now correctly restores defaults.
+- Dynamic Monitor Detection (Auto-detects active monitor).
 
 **Bug Fixes**
-- Fixed "future hideout" and "projects" settings not affecting overlay display
-- Fixed QThread and QLabel runtime errors
-- Fixed color match settings handling
-- Resolved JSON parsing errors in item data files
-- Fixed quest movement display updates
-- Fixed config defaults not saving on first run
+- Fixed application buttons becoming unresponsive after updates.
+- Fixed overlay text size setting not applying.
+- Fixed sync issues where overlay wouldn't reflect inventory changes immediately.
+- Fixed Quest Hub items disappearing after refresh.
+- Resolved various JSON parsing and config saving issues.
+- Fixed "future hideout" and "projects" settings not affecting overlay.
 
 V1.2.1
 Added 'Check for Updates' button in About tab.

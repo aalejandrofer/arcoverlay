@@ -235,8 +235,16 @@ class DataManager:
                 req_type = 'next' if pnum == comp_phase + 1 else 'future'
                 for req in phase.get('requirementItemIds', []):
                     if req.get('itemId') == tid:
-                        needed, owned = req.get('quantity', 0), inv.get(str(pnum), {}).get(req.get('itemId'), 0)
-                        if (rem := needed - owned) > 0: results.append((f"{pname} (Ph{pnum}): x{rem}", req_type))
+                        needed = req.get('quantity', 0)
+                        owned = inv.get(str(pnum), {}).get(req.get('itemId'), 0)
+                        is_complete = owned >= needed
+                        # Show remaining if not complete, otherwise show total needed with tick
+                        if is_complete:
+                            display_str = f"{pname} (Ph{pnum}): x{needed}"
+                        else:
+                            remaining = needed - owned
+                            display_str = f"{pname} (Ph{pnum}): x{remaining}"
+                        results.append((display_str, req_type, is_complete, needed))
         return results
 
     def get_item_by_name(self, name: str): return self.items.get(name)

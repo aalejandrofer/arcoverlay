@@ -34,51 +34,46 @@ class AboutTab(QWidget):
         patch_lbl = QLabel("Patch Notes"); patch_lbl.setStyleSheet("font-size: 18px; font-weight: bold; color: #E0E6ED; margin-bottom: 5px;"); layout.addWidget(patch_lbl)
         self.patch_notes = QTextEdit(); self.patch_notes.setReadOnly(True); self.patch_notes.setStyleSheet("QTextEdit { background-color: #232834; color: #E0E6ED; border: 1px solid #3E4451; border-radius: 4px; padding: 10px; font-size: 13px; font-family: 'Segoe UI'; }")
         self.patch_notes.setHtml(f"""
-        <b>{app_version} - Major Enhancements Update</b><br><br>
+        <b>{app_version} - New Features & Major Improvements</b><br><br>
+
+        <b>Core Systems</b><br>
+        - <b>Backup System:</b> New Backup/Restore tab in settings<br>
+        - <b>Hyperspeed OCR:</b> Faster and more accurate tooltip reading<br>
+        - <b>Live Settings:</b> Hotkeys and overlay settings update instantly<br>
+        - <b>Anchor Mode:</b> Pin Item Overlay to fixed position<br>
+        - <b>Opacity Slider:</b> Control overlay transparency<br><br>
 
         <b>Item Overlay Enhancements</b><br>
-        - Added drag-and-drop reordering for overlay sections in settings<br>
-        - Overlay sections now display in custom user-defined order<br>
-        - Settings checkboxes now display green ticks when enabled<br>
-        - Improved live preview of overlay appearance in settings<br>
-        - Item overlay can now display how much you have in storage<br><br>
+        - Drag-and-drop reordering for overlay sections<br>
+        - Display storage quantities in overlay<br>
+        - Added color picker for OCR color<br>
+        - Roman Numeral OCR Fix (Il -> II)<br>
+        - Smart Tooltip Cropping & Language Filtering<br><br>
 
-        <b>Quest Overlay Enhancements</b><br>
-        - Added Map names for quests<br><br>
+        <b>Quest & Hideout Management</b><br>
+        - <b>Quest Overlay:</b> Map names, search bar, and map filters<br>
+        - <b>Hideout Manager:</b> Remembers section states between sessions<br><br>
 
         <b>Item Database</b><br>
-        - Added quick filter buttons for Blueprints and Storage<br>
-        - Blueprint progress now shown as "Collected/Total" counter<br>
-        - Enhanced blueprint collection tracking with visual indicators<br>
-        - Added storage tracking with visual indicators<br>
-        - Added dedicated inspector panel for item details<br>
-        - Improved item search with multi-language support<br>
-        - Added filtering by: Tracked, Storage, Quest Requirements, Hideout Requirements, Project Requirements<br>
-        - Added item requirement details showing which quests/hideout/projects need each item<br><br>
-
-        <b>Language & Localization</b><br>
-        - Fixed overlay text to display in selected language for all item information<br>
-        - Improved language file handling and download process<br>
-        - Enhanced multi-language search capabilities<br><br>
-
-        <b>OCR & Performance</b><br>
-        - Optimized tooltip OCR for faster and more reliable captures<br>
-        - Pre-loading Tesseract worker for improved performance<br>
-        - Cropped tooltip processing to header section only<br>
-        - Fixed screenshot path handling on Windows<br><br>
+        - Quick filter buttons (Blueprints, Storage)<br>
+        - Blueprint progress counter and collection tracking<br>
+        - Dedicated inspector panel for item details<br>
+        - Improved filtering and multi-language search<br><br>
 
         <b>UI/UX Improvements</b><br>
-        - Reorganized settings into tabbed interface (General, Item Overlay, Quest Overlay)<br>
-        - Improved visual styling for better contrast and readability<br>
-        - Added separator lines between overlay sections<br>
-        - Enhanced item cards with rarity-based color coding<br><br>
+        - Dark Theme applied to all popups<br>
+        - <b>Progress Hub:</b> New Reset buttons properly clear data<br>
+        - <b>Window:</b> Prevented off-screen sticking<br>
+        - <b>Settings:</b> Reorganized into tabbed interface<br>
+        - Dynamic Monitor Detection<br><br>
 
         <b>Bug Fixes</b><br>
-        - Fixed "future hideout" and "projects" settings not affecting overlay display<br>
-        - Fixed QThread and QLabel runtime errors<br>
-        - Fixed color match settings handling<br>
-        - Resolved JSON parsing errors in item data files<br>
-        - Fixed quest movement display updates
+        - Fixed unresponsive app buttons after updates<br>
+        - Fixed overlay text size setting<br>
+        - Fixed inventory sync issues<br>
+        - Fixed Quest Hub items disappearing<br>
+        - Resolved JSON parsing errors<br>
+        - Fixed future hideout/projects settings<br>
         """)
         layout.addWidget(self.patch_notes)
 
