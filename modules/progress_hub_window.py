@@ -190,7 +190,7 @@ class ProgressHubWindow(QWidget):
         # Add Tabs
         self.tabs.addTab(self.quest_tab, "Quests")
         self.tabs.addTab(self.hideout_tab, "Hideout")
-        self.tabs.addTab(self.project_tab, "Expeditions")
+        self.tabs.addTab(self.project_tab, "Projects")
         self.tabs.addTab(self.item_db_tab, "Item Database")
         self.tabs.addTab(self.settings_tab, "Settings")
         self.tabs.addTab(self.about_tab, "About")
@@ -226,7 +226,7 @@ class ProgressHubWindow(QWidget):
         current_widget = self.tabs.widget(index)
         if current_widget == self.hideout_tab: self.reset_btn.setText("Reset Hideout"); self.reset_btn.setVisible(True)
         elif current_widget == self.quest_tab: self.reset_btn.setText("Reset Quests"); self.reset_btn.setVisible(True)
-        elif current_widget == self.project_tab: self.reset_btn.setText("Reset Expeditions"); self.reset_btn.setVisible(True)
+        elif current_widget == self.project_tab: self.reset_btn.setText("Reset Projects"); self.reset_btn.setVisible(True)
         elif current_widget == self.item_db_tab: self.reset_btn.setText("Reset Item Data"); self.reset_btn.setVisible(True)
         else: self.reset_btn.setVisible(False)
 

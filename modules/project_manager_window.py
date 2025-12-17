@@ -1,4 +1,4 @@
-from PyQt6.QtWidgets import (QLabel, QPushButton, QFrame, QCheckBox, QMessageBox, QWidget, QVBoxLayout, QHBoxLayout, QSizePolicy)
+from PyQt6.QtWidgets import (QLabel, QPushButton, QFrame, QCheckBox, QMessageBox, QWidget, QVBoxLayout, QHBoxLayout, QSizePolicy, QTabWidget, QScrollArea)
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QPainter, QColor, QFont
 from .constants import Constants
@@ -108,10 +108,9 @@ class CategoryValueControl(QWidget):
 
 class ProjectManagerWindow(BasePage):
     def __init__(self, project_data, user_progress, data_manager, rarity_colors, lang_code="en"):
-        super().__init__("Expeditions Manager")
+        super().__init__("Projects Manager")
         self.data_manager = data_manager
         self.rarity_colors = rarity_colors
-        self.project_data = project_data
         self.project_data = project_data
         self.lang_code = lang_code 
 
@@ -128,6 +127,22 @@ class ProjectManagerWindow(BasePage):
         self.chk_show_completed.stateChanged.connect(self.refresh_visibility)
         self.header.add_widget(self.chk_show_completed)
         
+        # Replace BasePage scroll with Tabs
+        self.main_layout.removeWidget(self.scroll)
+        self.scroll.setParent(None)
+        
+        self.tabs = QTabWidget()
+        # Restore the gold/orange top border to the tab content area, matching previous Project styling
+        self.tabs.setStyleSheet("""
+            QTabWidget::pane {
+                border: 1px solid #333;
+                border-top: 3px solid #ED9A44;
+                border-radius: 4px;
+                background-color: #1A1F2B;
+            }
+        """)
+        self.main_layout.insertWidget(1, self.tabs) # Insert after header
+
         self.build_ui()
 
     def build_ui(self):
@@ -135,14 +150,31 @@ class ProjectManagerWindow(BasePage):
             p_id = project.get('id')
             if not p_id: continue
             
-            p_frame = QFrame()
-            p_frame.setObjectName("ProjectFrame") 
-            p_layout = QVBoxLayout(p_frame)
-            p_layout.setContentsMargins(8, 8, 8, 8) 
-            self.content_layout.addWidget(p_frame)
-            
             p_name = self.data_manager.get_localized_name(project, self.lang_code)
-            p_layout.addWidget(QLabel(p_name, objectName="Header"))
+            
+            # Create a tab for this project
+            tab_widget = QWidget()
+            tab_widget.setStyleSheet("background-color: transparent;")
+            tab_layout = QVBoxLayout(tab_widget)
+            tab_layout.setContentsMargins(0, 0, 0, 0)
+            
+            # Scroll Area for the tab
+            scroll = QScrollArea()
+            scroll.setWidgetResizable(True)
+            scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
+            tab_layout.addWidget(scroll)
+            
+            content_widget = QWidget()
+            content_widget.setObjectName("scroll_content")
+            content_layout = QVBoxLayout(content_widget)
+            content_layout.setContentsMargins(20, 20, 20, 20)
+            content_layout.setSpacing(15)
+            scroll.setWidget(content_widget)
+            
+            self.tabs.addTab(tab_widget, p_name)
+            
+            # Add Project Title inside the tab as well
+            content_layout.addWidget(QLabel(p_name, objectName="Header"))
             
             for phase_info in sorted(project.get('phases', []), key=lambda x: x.get('phase', 0)):
                 phase_num = phase_info.get('phase', 0)
@@ -157,7 +189,7 @@ class ProjectManagerWindow(BasePage):
                 w_layout = QVBoxLayout(wrapper)
                 w_layout.setContentsMargins(0, 10, 0, 10)
                 w_layout.setSpacing(5)
-                p_layout.addWidget(wrapper)
+                content_layout.addWidget(wrapper)
                 self.phase_frames[(p_id, phase_num)] = wrapper
                 
                 phase_name = phase_info.get('name')
@@ -243,6 +275,9 @@ class ProjectManagerWindow(BasePage):
                         w_layout.addLayout(row)
                 
                 wrapper.setProperty("btn_complete", btn_complete)
+        
+        # Add a stretch to the end of each tab to push content up if needed? 
+        # Actually QScrollArea handles it.
         self.refresh_visibility()
 
     def _on_inventory_changed(self, p_id, phase_num, item_id):
