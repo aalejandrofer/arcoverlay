@@ -58,7 +58,7 @@ If you want to run from source:
     python arcoverlay.py
     ```
 
-## � Building (Windows 11)
+## 🏗️ Building (Windows 11)
 
 To build the native Windows MSI installer, you must run the following command from a Windows terminal (not WSL):
 
@@ -68,7 +68,7 @@ python buildtools/msi_setup.py bdist_msi
 
 The installer will be generated in the `dist/` directory.
 
-## �🛠️ Built With
+## 🛠️ Built With
 
 -   **[Python](https://www.python.org/)**: Core application logic.
 -   **[PyQt6](https://riverbankcomputing.com/software/pyqt/)**: Modern GUI framework.
@@ -80,6 +80,6 @@ The installer will be generated in the `dist/` directory.
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## AI Development
+## 🤖 AI Development
 
-This project has been developed with the assistance of AI tools, specially models like Gemini 3 Pro and Gemini 3 Flash Preview in combination with Antigravity IDE.
+This project has been developed with the assistance of AI tools, specifically models like Gemini 3 Pro and Gemini 3 Flash in combination with Antigravity IDE.
