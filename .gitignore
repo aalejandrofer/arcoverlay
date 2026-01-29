@@ -8,11 +8,13 @@ venv/
 build/
 dist/
 
-# User Data
-data/progress.json
-data/progress.json.bak
-data/config.ini
+#data
+data/
 
+#
 # IDE
 .vscode/
 .idea/
+
+.DS_Store
+uv.lock
