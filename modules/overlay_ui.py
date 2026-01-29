@@ -32,10 +32,9 @@ class OverlayRenderer:
         hideout_reqs = data_context.get('hideout_reqs', [])
         project_reqs = data_context.get('project_reqs', [])
         quest_reqs = data_context.get('quest_reqs', [])
+        stash_count = data_context.get('stash_count', 0)
         is_tracked = data_context.get('is_tracked', False)
         toggle_track_callback = data_context.get('toggle_track_callback', None)
-        trade_info = data_context.get('trade_info', [])
-        crafting_info = data_context.get('crafting_info', [])
         
         # Settings
         font_size = user_settings.getint('ItemOverlay', 'font_size', fallback=12)
@@ -54,10 +53,8 @@ class OverlayRenderer:
                 img_lbl = QLabel()
                 pix = QPixmap(img_path).scaled(56, 56, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
                 img_lbl.setPixmap(pix)
-                img_lbl.setStyleSheet("background: transparent; border: none;")
+                img_lbl.setStyleSheet("border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; background: rgba(0,0,0,0.3); padding: 2px;")
                 info_row.addWidget(img_lbl)
-        
-        info_row.addStretch(0) # Keep image on the left without stretching
 
         # Name & Subtitle
         name_vbox = QVBoxLayout()
@@ -126,7 +123,7 @@ class OverlayRenderer:
         OverlayRenderer._add_separator(container_layout)
 
         # 3. Sections
-        section_order = user_settings.get('ItemOverlay', 'section_order', fallback="price,notes,crafting,hideout,project,recycle,salvage").split(',')
+        section_order = user_settings.get('ItemOverlay', 'section_order', fallback="price,notes,crafting,hideout,project,recycle,salvage,recommendation").split(',')
         has_previous_section = True 
 
         # Config mapping for visibility
@@ -138,7 +135,8 @@ class OverlayRenderer:
             'hideout': 'show_hideout_reqs',
             'project': 'show_project_reqs',
             'recycle': 'show_recycles_into',
-            'salvage': 'show_salvages_into'
+            'salvage': 'show_salvages_into',
+            'recommendation': 'show_recommendation'
         }
 
         for section_id in section_order:
@@ -154,9 +152,10 @@ class OverlayRenderer:
                 pass
             
             elif section_id == "notes":
-                user_note = data_context.get('user_note', '')
-                if user_note:
-                    OverlayRenderer._add_glass_section(container_layout, None, user_note, "#61AFEF", font_size-1, is_italic=True)
+                item_tags = data_manager.get_item_tags(item_data.get('id', ''))
+                if item_tags:
+                    tags_str = ", ".join(item_tags)
+                    OverlayRenderer._add_glass_section(container_layout, None, tags_str, "#61AFEF", font_size-1, is_italic=True)
                     section_added = True
             
             elif section_id == "hideout" and hideout_reqs:
@@ -206,22 +205,12 @@ class OverlayRenderer:
                 OverlayRenderer._add_requirement_section(container_layout, "QUEST REQUIREMENTS", Constants.QUEST_ICON_PATH, quest_reqs, font_size, is_quest=True)
                 section_added = True
 
-            elif section_id == "trader" and trade_info:
-                lines = []
-                for t in trade_info:
-                    trader = t.get('trader', 'Unknown')
-                    cost = t.get('cost', {})
-                    cost_qty = cost.get('quantity', 0)
-                    cost_item = data_manager.get_localized_name(cost.get('itemId'), lang_code)
-                    lines.append(f"{trader}: x{cost_qty} {cost_item}")
-                if lines:
-                    OverlayRenderer._add_glass_section(container_layout, Constants.TRADER_ICON_PATH, "TRADER OFFERS", "#E5C07B", font_size-1, lines=lines)
+            elif section_id == "recommendation":
+                rec = item_data.get('recommendation', '').upper()
+                if rec:
+                    color = "#E06C75" if 'SELL' in rec else ("#98C379" if 'KEEP' in rec else "#E5C07B")
+                    OverlayRenderer._add_glass_section(container_layout, None, f"DECISION: {rec}", color, font_size, bold_title=True)
                     section_added = True
-
-            elif section_id == "crafting" and crafting_info:
-                OverlayRenderer._add_requirement_section(container_layout, "CRAFTING INFO", Constants.PROJECT_ICON_PATH, crafting_info, font_size)
-                section_added = True
-
                     
             if section_added:
                 OverlayRenderer._add_separator(container_layout)
@@ -541,10 +530,8 @@ class ItemOverlay(BaseOverlay):
             'item_data': self.item_data,
             'hideout_reqs': self.hideout_reqs,
             'project_reqs': self.project_reqs,
+            'quest_reqs': self.quest_reqs,
             'stash_count': self.stash_count,
-            'user_note': self.user_note,
-            'trade_info': getattr(self, 'trade_info', []),
-            'crafting_info': getattr(self, 'blueprint_required_info', []), # Fallback or renamed
             'is_tracked': self.data_manager.is_item_tracked(self.item_data.get('id')),
             'toggle_track_callback': self.toggle_track
         }

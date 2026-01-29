@@ -29,6 +29,9 @@ data/
 # IDEs
 .vscode/
 .idea/
+
+# Temp
+.venv/
 *.swp
 *.swo
 

@@ -35,7 +35,7 @@ if sys.platform == "win32":
 
 setup(
     name="ArcOverlay",
-    version="1.4.0",
+    version="1.3.1",
     description="ArcOverlay Client",
     options={
         "build_exe": build_exe_options,

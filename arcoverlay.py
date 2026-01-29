@@ -16,9 +16,15 @@ from modules.overlay_ui import ItemOverlay, QuestOverlayUI
 from modules.progress_hub_window import ProgressHubWindow
 from modules.data_manager import ItemDatabase, DataManager
 from modules.scanner import ItemScanner
+from modules.update_checker import UpdateChecker
+# from modules.app_updater import AppUpdateChecker
 from modules.config_manager import ConfigManager
 
-APP_VERSION = "1.4.0"
+# --- SCIPY IMPORTS REMOVED HERE ---
+# (They used to be here, but we deleted them because we use OpenCV now)
+
+APP_VERSION = "1.3.1"
+APP_UPDATE_URL = "https://arc-companion.xyz/check_update.php"
 
 @dataclass
 class Config:
@@ -70,6 +76,10 @@ class HotkeyListener(QObject):
     def run(self):
         print(f"Hotkey listener started. KB: {list(self.kb_hotkey_map.keys())}, Mouse: {list(self.m_hotkey_map.keys())}")
         
+        # We need to manage both listeners. 
+        # Since GlobalHotKeys/Listener are context managers that start a thread, 
+        # we can just start them and then join one (or loop).
+        
         try:
             self.kb_listener = pynput_keyboard.GlobalHotKeys(self.kb_hotkey_map)
             self.kb_listener.start()
@@ -78,6 +88,7 @@ class HotkeyListener(QObject):
                 self.m_listener = pynput_mouse.Listener(on_click=self._on_mouse_click)
                 self.m_listener.start()
             
+            # Wait for the keyboard listener to finish (it won't unless stopped)
             self.kb_listener.join()
         except Exception as e: 
             print(f"Error in Hotkey Listener: {e}")
@@ -103,7 +114,11 @@ class HotkeyListener(QObject):
     def _on_quest_log(self): self.quest_log_triggered.emit()
     def _on_hub(self): self.hub_triggered.emit()
 
+# --- SCAN WORKER (THREADING) ---
 class ScanWorker(QObject):
+    """
+    Runs the screen scanning and OCR process in a separate thread.
+    """
     finished = pyqtSignal(object)
     error = pyqtSignal(str)
 
@@ -114,6 +129,7 @@ class ScanWorker(QObject):
 
     def run(self):
         try:
+            # This calls the new OpenCV+MSS scanner
             result = self.scanner.scan_screen(full_screen=self.from_tray)
             self.finished.emit(result)
         except Exception as e:
@@ -122,6 +138,8 @@ class ScanWorker(QObject):
             self.finished.emit(None)
 
 class ArcOverlayApp(QObject):
+    start_data_download = pyqtSignal(list)
+    start_lang_download = pyqtSignal(str)
 
     def __init__(self, config: Config):
         super().__init__()
@@ -130,28 +148,40 @@ class ArcOverlayApp(QObject):
         self.app.aboutToQuit.connect(self.cleanup_threads)
         self.cmd_config = config
 
+        # 1. Initialize Config Manager
         self.config_manager = ConfigManager()
 
+        # 2. Initialize Data
         self.db = ItemDatabase()
         self.data_manager = DataManager(self.db.items)
         self.overlays = []
         self.scan_thread = None
 
+        # 3. Initialize Scanner
         self.scanner = ItemScanner(self.cmd_config, self.data_manager)
 
         self.reload_settings(is_initial_load=True)
 
+        # 4. Initialize Windows
         self.progress_hub = ProgressHubWindow(
             self.data_manager,
             self.config_manager,
             self.reload_settings,
             APP_VERSION,
+            None, # lambda: self.check_for_app_updates(manual=True),
             lang_code=self.json_lang_code
         )
+        # NOTE: Do NOT connect to reload_progress here - it creates a new dict object
+        # which breaks references held by manager windows. The in-memory data is already correct.
 
+        self.progress_hub.settings_tab.request_data_update.connect(self.run_manual_data_check)
+        self.progress_hub.settings_tab.request_lang_download.connect(self.run_lang_download)
+        # self.progress_hub.settings_tab.request_app_update.connect(lambda: self.check_for_app_updates(manual=True))
         self.progress_hub.settings_tab.hotkeys_updated.connect(self.restart_hotkeys)
+
         self.progress_hub.show()
 
+        # 5. Tray & Hotkeys
         self.tray = QSystemTrayIcon()
         self.tray.setIcon(QIcon(Constants.ICON_FILE if os.path.exists(Constants.ICON_FILE) else self.app.style().standardIcon(self.app.style().StandardPixmap.SP_ComputerIcon)))
         self._build_tray_menu()
@@ -159,11 +189,14 @@ class ArcOverlayApp(QObject):
         self.tray.show()
 
         self.hotkey_thread = QThread()
-        self.start_background_services()
+        # 6. Startup Checks
+        if self.ensure_data_exists():
+            self.start_background_services()
 
     def start_background_services(self):
-        """Starts background services."""
+        """Starts hotkeys and app update checks after data is verified."""
         self._start_hotkey_service()
+        # self.check_for_app_updates(manual=False)
 
     def on_tray_icon_activated(self, reason):
         if reason == QSystemTrayIcon.ActivationReason.Trigger:
@@ -197,6 +230,7 @@ class ArcOverlayApp(QObject):
 
     def restart_hotkeys(self):
         print("Restarting hotkey service...")
+        # 1. Stop existing
         if hasattr(self, 'hotkey_worker') and self.hotkey_worker:
             try:
                 self.hotkey_worker.stop()
@@ -205,11 +239,13 @@ class ArcOverlayApp(QObject):
         if hasattr(self, 'hotkey_thread') and self.hotkey_thread:
             if self.hotkey_thread.isRunning():
                 self.hotkey_thread.quit()
+                # Use a timeout to prevent hanging the whole app if pynput is stuck
                 if not self.hotkey_thread.wait(2000): 
                     print("[WARNING] Hotkey thread took too long to stop, terminating...")
                     self.hotkey_thread.terminate()
                     self.hotkey_thread.wait()
 
+        # 2. Re-create thread (QThreads are one-shotish)
         self.hotkey_thread = QThread()
         self._start_hotkey_service()
         print("Hotkey service restarted.")
@@ -236,26 +272,34 @@ class ArcOverlayApp(QObject):
 
         self.scanner.update_settings(self.target_color, self.ocr_lang_code, self.json_lang_code, full_screen_mode=full_screen, save_debug_images=save_debug)
 
+        # --- NEW: Trigger Live Overlay Update ---
         for overlay in self.overlays:
             if hasattr(overlay, 'refresh_ui'):
                 overlay.refresh_ui()
+        # ----------------------------------------
 
         if is_initial_load: print(f"[INFO] Settings Loaded. Lang: {self.ocr_lang_code}")
         else: print("Settings reloaded.")
 
+    # --- ITEM CHECK WITH THREADING ---
     def process_item_check(self, from_tray=False):
+        # 1. Close overlays
         for overlay in self.overlays:
             overlay.close()
         self.overlays.clear()
 
+        # 2. Prevent overlapping scans (CRASH FIX)
         if self.scan_thread:
             try:
                 if self.scan_thread.isRunning():
                     print("[INFO] Scan already in progress.")
                     return
             except RuntimeError:
+                # The C++ object was deleted, but Python reference exists.
+                # We catch the error and reset the variable so we can start fresh.
                 self.scan_thread = None
 
+        # 3. Setup Worker
         self.scan_thread = QThread()
         self.scan_worker = ScanWorker(self.scanner, from_tray)
         self.scan_worker.moveToThread(self.scan_thread)
@@ -279,6 +323,7 @@ class ArcOverlayApp(QObject):
         except Exception as e: print(f"Error: {e}")
 
     def display_item_overlay(self, data):
+        # Use simple instantiation instead of factory
         from modules.overlay_ui import ItemOverlay
         ov = ItemOverlay(
             data['item'], 
@@ -303,29 +348,169 @@ class ArcOverlayApp(QObject):
         self.overlays.append(ov)
 
     def ensure_data_exists(self):
-        # We assume data exists now as update logic is removed
+        if not (os.path.exists(Constants.DATA_DIR) and os.path.exists(os.path.join(Constants.DATA_DIR, 'projects.json'))):
+            msg = QMessageBox(self.progress_hub if hasattr(self, 'progress_hub') else None)
+            msg.setWindowTitle("Missing Data"); msg.setText("Missing data. Download now?")
+            msg.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            if msg.exec() == QMessageBox.StandardButton.Yes:
+                self.run_manual_data_check(initial=True)
+                return False
+            return False # User said no, but data is still missing
         return True
 
+    def run_manual_data_check(self, initial=False):
+        if hasattr(self, 'data_update_thread') and self.data_update_thread.isRunning(): return
+
+        self.data_update_thread = QThread()
+        self.data_updater = UpdateChecker()
+        self.data_updater.moveToThread(self.data_update_thread)
+
+        self.start_data_download.connect(self.data_updater.download_updates)
+        self.data_updater.update_check_finished.connect(self._on_data_check_finished)
+
+        if not initial:
+            self.data_updater.checking_for_updates.connect(lambda: self.progress_hub.settings_tab.set_update_status("Checking..."))
+            self.data_updater.download_progress.connect(lambda c, t, f: self.progress_hub.settings_tab.set_update_status(f"Downloading ({c}/{t}): {f}"))
+            # Connect to our new handler instead of just setting status
+            self.data_updater.update_complete.connect(self._on_manual_download_complete)
+        else:
+            self.progress_dialog = QProgressDialog("Connecting...", "Cancel", 0, 0, self.progress_hub)
+            self.progress_dialog.setWindowModality(Qt.WindowModality.ApplicationModal); self.progress_dialog.show()
+            self.data_updater.download_progress.connect(lambda c, t, f: self.progress_dialog.setLabelText(f"Downloading ({c}/{t}): {f}"))
+            self.data_updater.update_complete.connect(self._on_initial_complete)
+
+        self.data_update_thread.started.connect(self.data_updater.run_check)
+        self.data_update_thread.finished.connect(self.data_updater.deleteLater)
+        self.data_update_thread.start()
+
+    def _on_manual_download_complete(self, success, message):
+        """Called when a manual update download finishes."""
+        self.progress_hub.settings_tab.set_update_status(message)
+        self.data_update_thread.quit()
+
+        if success:
+            # Hot Reload: Store state -> Reload -> Restore state
+            try:
+                current_tab_index = self.progress_hub.tabs.currentIndex()
+                was_visible = self.progress_hub.isVisible()
+                saved_geometry = self.progress_hub.saveGeometry()
+
+                self.reload_data_subsystems()
+
+                if was_visible:
+                    self.progress_hub.restoreGeometry(saved_geometry)
+                    self.progress_hub.show()
+                    self.progress_hub.tabs.setCurrentIndex(current_tab_index)
+
+                QMessageBox.information(self.progress_hub, "Update Complete", "Data updated and reloaded successfully.")
+            except Exception as e:
+                print(f"Error during hot reload: {e}")
+                QMessageBox.warning(self.progress_hub, "Reload Error", f"Data downloaded, but reload failed: {e}\nPlease restart the app manually.")
+
+    def _on_data_check_finished(self, files, msg):
+        if hasattr(self, 'progress_dialog') and self.progress_dialog.isVisible():
+            if files: self.progress_dialog.setMaximum(len(files)); self.start_data_download.emit(files)
+            else: self.progress_dialog.close(); self.data_update_thread.quit()
+        else:
+            self.progress_hub.settings_tab.set_update_status(msg)
+            if files:
+                reply = QMessageBox.question(self.progress_hub, "Update", f"{msg}\nDownload now?", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+                if reply == QMessageBox.StandardButton.Yes: self.start_data_download.emit(files)
+                else: self.data_update_thread.quit()
+            else: self.data_update_thread.quit()
+
+    def run_lang_download(self, lang_code):
+        if hasattr(self, 'data_update_thread') and self.data_update_thread.isRunning(): return
+        self.data_update_thread = QThread()
+        self.data_updater = UpdateChecker()
+        self.data_updater.moveToThread(self.data_update_thread)
+        self.start_lang_download.connect(self.data_updater.download_language)
+
+        self.data_updater.download_progress.connect(lambda c, t, f: self.progress_hub.settings_tab.set_update_status(f"Downloading Language... {c}%"))
+        self.data_updater.update_complete.connect(lambda s, m: self.progress_hub.settings_tab.set_update_status(m))
+        self.data_updater.update_complete.connect(self.data_update_thread.quit)
+
+        self.data_update_thread.started.connect(lambda: self.start_lang_download.emit(lang_code))
+        self.data_update_thread.finished.connect(self.data_updater.deleteLater)
+        self.data_update_thread.start()
+
+    def _on_initial_complete(self, success, message):
+        self.progress_dialog.close(); self.data_update_thread.quit()
+        if success:
+            self.reload_data_subsystems()
+            self.start_background_services()
+        else: QMessageBox.critical(self.progress_hub, "Failed", message)
+
+    def reload_data_subsystems(self):
+        self.db = ItemDatabase(); self.data_manager = DataManager(self.db.items)
+        self.scanner = ItemScanner(self.cmd_config, self.data_manager)
+        self.progress_hub.cleanup()
+        self.progress_hub = ProgressHubWindow(self.data_manager, self.config_manager, self.reload_settings, APP_VERSION, None, lang_code=self.json_lang_code)
+
+        # --- RE-CONNECT SIGNALS ---
+        # Critical for hot reload: Re-attach buttons to their handlers
+        self.progress_hub.settings_tab.request_data_update.connect(self.run_manual_data_check)
+        self.progress_hub.settings_tab.request_lang_download.connect(self.run_lang_download)
+        # self.progress_hub.settings_tab.request_app_update.connect(lambda: self.check_for_app_updates(manual=True))
+        self.progress_hub.settings_tab.hotkeys_updated.connect(self.restart_hotkeys)
+        self.progress_hub.settings_tab.hotkeys_updated.connect(self.restart_hotkeys)
+        # --------------------------
+        self.progress_hub.show()
+        self._build_tray_menu()
+
+
+    def check_for_app_updates(self, manual=False):
+        if hasattr(self, 'app_update_thread') and self.app_update_thread:
+            try:
+                if self.app_update_thread.isRunning():
+                     if manual:
+                         QMessageBox.information(self.progress_hub, "Check in Progress", "An update check is already in progress.")
+                     return
+            except RuntimeError:
+                self.app_update_thread = None
+
+        self.app_update_thread = QThread()
+        self.app_update_worker = AppUpdateChecker(APP_VERSION, APP_UPDATE_URL)
+        self.app_update_worker.moveToThread(self.app_update_thread)
+        self.app_update_thread.started.connect(self.app_update_worker.run_check)
+        self.app_update_worker.update_available.connect(lambda v, u: QMessageBox.question(self.progress_hub, "Update", f"New version {v} available. Open site?", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No) == QMessageBox.StandardButton.Yes and QDesktopServices.openUrl(QUrl(u)))
+        self.app_update_worker.check_finished.connect(self.app_update_thread.quit)
+        self.app_update_thread.finished.connect(self.app_update_thread.deleteLater)
+        if manual: self.app_update_worker.check_finished.connect(lambda: QMessageBox.information(self.progress_hub, "Up to Date", f"Version {APP_VERSION} is the latest."))
+        self.app_update_thread.start()
+
+
     def cleanup_threads(self):
+            # Hotkey Worker
             if hasattr(self, 'hotkey_worker') and self.hotkey_worker:
                 try:
                     self.hotkey_worker.stop()
                 except RuntimeError: pass
 
+            # Hotkey Thread
             if hasattr(self, 'hotkey_thread') and self.hotkey_thread:
                 try:
                     self.hotkey_thread.quit()
                     self.hotkey_thread.wait()
                 except RuntimeError: pass
 
+            # Scan Thread (The one causing the error)
             if hasattr(self, 'scan_thread') and self.scan_thread:
                 try:
                     if self.scan_thread.isRunning():
                         self.scan_thread.quit()
                         self.scan_thread.wait()
                 except RuntimeError:
-                    pass
+                    pass # Thread was already deleted, which is fine
 
+            # Data Update Thread
+            if hasattr(self, 'data_update_thread') and self.data_update_thread:
+                try:
+                    self.data_update_thread.quit()
+                    self.data_update_thread.wait()
+                except RuntimeError: pass
+
+            # Progress Hub
             if hasattr(self, 'progress_hub'):
                 try:
                     self.progress_hub.cleanup()
@@ -336,8 +521,10 @@ class ArcOverlayApp(QObject):
 
     def restore_app(self):
         self.progress_hub.show()
+        # First restore from minimized state if needed
         if self.progress_hub.windowState() & Qt.WindowState.WindowMinimized:
             self.progress_hub.setWindowState(self.progress_hub.windowState() & ~Qt.WindowState.WindowMinimized)
+        # Force window to the foreground on Windows
         self.progress_hub.setWindowFlags(self.progress_hub.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
         self.progress_hub.show()
         self.progress_hub.setWindowFlags(self.progress_hub.windowFlags() & ~Qt.WindowType.WindowStaysOnTopHint)
@@ -350,11 +537,15 @@ from modules.ui_components import set_dark_title_bar, DarkTitleBarProxy
 def main():
     def get_tesseract_path():
         if getattr(sys, 'frozen', False):
+            # Fix for Qt platform plugin error
             base_path = getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
             qt_plugins_path = os.path.join(base_path, 'PyQt6', 'Qt6', 'plugins')
             if not os.path.exists(qt_plugins_path):
+                 # Alternative path for some PyInstaller versions
                  qt_plugins_path = os.path.join(base_path, 'PyQt6', 'plugins')
+            
             os.environ['QT_QPA_PLATFORM_PLUGIN_PATH'] = os.path.join(qt_plugins_path, 'platforms')
+            
             return os.path.join(base_path, 'Tesseract-OCR', 'tesseract.exe')
         local = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'Tesseract-OCR', 'tesseract.exe')
         return local if os.path.exists(local) else None
@@ -372,13 +563,16 @@ def main():
         app_instance = QApplication(sys.argv)
         app_instance.setStyleSheet(Constants.DARK_THEME_QSS)
 
+        # Apply dark title bars globally
         dark_proxy = DarkTitleBarProxy()
         app_instance.installEventFilter(dark_proxy)
+        # Keep reference to prevent GC
         app_instance._dark_proxy = dark_proxy
 
         if os.path.exists(Constants.ICON_FILE): app_instance.setWindowIcon(QIcon(Constants.ICON_FILE))
         app = ArcOverlayApp(config); app.run()
     except Exception as e:
+        # Robust crash logging
         try:
             log_dir = Constants.DATA_DIR if 'Constants' in globals() else os.getcwd()
             os.makedirs(log_dir, exist_ok=True)
