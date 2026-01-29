@@ -2,7 +2,5 @@
 trigger: always_on
 ---
 
-1. After any major change, update the Patchnotes.md file.
-2. Update version numbers after every github commit.
-3. Avoid going into thinking loopholes, if stuck tell the user and stop generating.
-4. 
+1. After any major change, update the Patchnotes.md file. Only updated the section that matches the current version. README.md has the current version number.
+2. Avoid going into thinking loopholes, if stuck tell the user and stop generating.
