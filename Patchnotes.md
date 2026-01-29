@@ -1,5 +1,17 @@
 # Patch Notes
 
+## [1.3.3] - 2026-01-29
+
+### Added
+
+- **Database Update Integration**: Added a new "Update Database" feature in the Settings menu to fetch the latest game data and items.
+- **Progress Tracking**: Integrated progress bars and status indicators for the database update process.
+
+### Fixed
+
+- **Settings UI Crash**: Resolved a critical `NameError` related to `QProgressBar` that caused the application to crash when opening settings.
+- **UI Initialization**: Improved the reliability of the settings window initialization.
+
 ## [1.3.2] - 2026-01-29
 
 ### Added
