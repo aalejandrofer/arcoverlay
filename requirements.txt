@@ -4,7 +4,6 @@ pytesseract
 rapidfuzz
 pyperclip
 pynput
-pystray
 pyqt6
 requests
 mss

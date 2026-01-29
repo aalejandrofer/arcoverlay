@@ -5,6 +5,7 @@ import ctypes
 from PIL import Image
 from typing import Optional, Tuple
 import os
+import sys
 
 class ImageProcessor:
     @staticmethod
@@ -53,9 +54,13 @@ class ImageProcessor:
 
     @staticmethod
     def capture_and_process(target_color: Optional[Tuple[int, int, int]], full_screen: bool = False, debug_path: str = None, debug_prefix: str = None):
+        # Platform check - Windows-only due to ctypes.windll usage
+        if sys.platform != 'win32':
+            print("[ERROR] Screen capture is only supported on Windows.")
+            return None
+            
         try:
             with mss.mss() as sct:
-                # --- 1. Determine Capture Region ---
                 # --- 1. Determine Capture Region ---
                 if full_screen:
                     # Monitor 1 is usually the Primary Monitor (default fallback)

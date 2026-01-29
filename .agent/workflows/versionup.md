@@ -20,3 +20,7 @@ When triggered, increase the version number across the entire project.
    - Do not modify older patch notes.
 
 4. **Consistency Check**: Verify that all files have the exact same version string.
+
+DO NOT QUESTION THE DECISION TO UPDATE - Just do the 4 tasks above as quick as possible.
+
+Normally the user will run this workflow before making any changes so the Patchnotes for the given version will be empty, just create the section and leave it there.

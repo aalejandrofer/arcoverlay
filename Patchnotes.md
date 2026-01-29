@@ -1,5 +1,18 @@
 # Patch Notes
 
+## [1.3.4] - 2026-01-29
+
+### Fixed
+
+- **Migration Bug**: Fixed undefined variable bug in `data_manager.py` that could crash during JSON to SQLite migration when tracked items were stored in dict format.
+- **Platform Safety**: Added Windows platform check in screen capture module to prevent crashes on macOS/Linux with a clear error message.
+
+### Changed
+
+- **Dependency Cleanup**: Removed unused `pystray` package from dependencies (PyQt6's `QSystemTrayIcon` is used instead).
+- **Performance**: Added caching for language-filtered items in the scanner to avoid rebuilding the list on every scan.
+- **OCR Caching**: Added LRU cache for OCR results to skip expensive Tesseract calls when hovering the same item repeatedly.
+
 ## [1.3.3] - 2026-01-29
 
 ### Added

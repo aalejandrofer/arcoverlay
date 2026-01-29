@@ -1,9 +1,11 @@
 import re
 import os
+import hashlib
 import pytesseract
 from PIL import ImageEnhance
 from typing import Optional, Dict, Any, List, Tuple
 from datetime import datetime
+from collections import OrderedDict
 
 # RapidFuzz / Difflib check
 try:
@@ -63,7 +65,15 @@ class ItemScanner:
         self.ocr_lang_code = 'eng'
         self.json_lang_code = 'en'
         self.full_screen_mode = False 
-        self.save_debug_images = False # Default Off
+        self.save_debug_images = False  # Default Off
+
+        # Item cache for performance
+        self._cached_filtered_items: Optional[List[Tuple[str, dict]]] = None
+        self._cache_lang_code: Optional[str] = None
+
+        # OCR result cache (LRU, max 10 entries)
+        self._ocr_cache: OrderedDict[str, Optional[str]] = OrderedDict()
+        self._ocr_cache_max_size = 10
 
         # Configure Tesseract Path if provided
         if self.cmd_config.tesseract_path:
@@ -76,13 +86,23 @@ class ItemScanner:
         self.json_lang_code = json_lang_code
         self.full_screen_mode = full_screen_mode
         self.save_debug_images = save_debug_images
+        
+        # Invalidate item cache when language changes
+        if self._cache_lang_code != json_lang_code:
+            self._cached_filtered_items = None
+            self._cache_lang_code = json_lang_code
 
     def _get_language_filtered_items(self) -> List[Tuple[str, dict]]:
         """
         Get item names filtered by the currently selected JSON language.
         Returns a list of (name, item_data) tuples for only the selected language.
         This prevents matching against Chinese/Japanese/etc names when English is selected.
+        Uses caching to avoid rebuilding the list on every scan.
         """
+        # Return cached result if available
+        if self._cached_filtered_items is not None and self._cache_lang_code == self.json_lang_code:
+            return self._cached_filtered_items
+        
         lang_code = self.json_lang_code if self.json_lang_code else 'en'
 
         # Use a set to track unique items by their 'id' to avoid duplicates
@@ -115,6 +135,9 @@ class ItemScanner:
                     if item_id:
                         seen_ids.add(item_id)
 
+        # Cache and return the filtered items
+        self._cached_filtered_items = filtered_items
+        self._cache_lang_code = lang_code
         return filtered_items
 
     def _find_best_match(self, candidates: List[str], item_names: List[str], name_to_actual: dict) -> Tuple[Optional[str], float]:
@@ -247,9 +270,9 @@ class ItemScanner:
         # -----------------------------------------------------------------
 
         # 3. Enhance Image for OCR
-        img = img.convert('L') # Convert to Grayscale
+        img = img.convert('L')  # Convert to Grayscale
         enhancer = ImageEnhance.Contrast(img)
-        img = enhancer.enhance(2.0) # High Contrast
+        img = enhancer.enhance(2.0)  # High Contrast
         
         # --- DEBUG: SAVE PROCESSED HEADER IMAGE ---
         if self.save_debug_images and debug_path and debug_prefix:
@@ -259,6 +282,22 @@ class ItemScanner:
             except Exception as e:
                 print(f"Failed to save debug processed image: {e}")
         # ---------------------------------------
+
+        # --- OCR CACHE: Compute image hash and check cache ---
+        img_bytes = img.tobytes()
+        img_hash = hashlib.md5(img_bytes).hexdigest()
+        
+        if img_hash in self._ocr_cache:
+            cached_item_name = self._ocr_cache[img_hash]
+            if self.cmd_config.debug:
+                print(f"[DEBUG] OCR Cache HIT: {cached_item_name}")
+            # Move to end (LRU behavior)
+            self._ocr_cache.move_to_end(img_hash)
+            if cached_item_name is None:
+                return None
+            # Return cached result by re-aggregating data
+            return self._aggregate_item_data(cached_item_name)
+        # -----------------------------------------------------
         
         # 4. Setup Language / Tesseract Config (WITH SAFE ENGLISH WHITELIST)
         custom_lang_file = os.path.join(Constants.TESSDATA_DIR, f"{self.ocr_lang_code}.traineddata")
@@ -327,12 +366,25 @@ class ItemScanner:
         if self.cmd_config.debug: 
             print(f"[DEBUG] Best Match: '{best_name}' with score {best_score}")
 
+        # --- OCR CACHE: Store result ---
+        self._ocr_cache[img_hash] = best_name
+        if len(self._ocr_cache) > self._ocr_cache_max_size:
+            self._ocr_cache.popitem(last=False)  # Remove oldest entry
+        # -------------------------------
+
         if not best_name:
             return None
 
         # 8. Aggregate Data
-        print(f"Item Found: {best_name}. gathering data...")
-        item_details = self.data_manager.get_item_by_name(best_name)
+        return self._aggregate_item_data(best_name)
+
+    def _aggregate_item_data(self, item_name: str) -> Optional[Dict[str, Any]]:
+        """
+        Aggregates all data for a matched item name.
+        Extracted as a helper to enable OCR cache hits to return full data.
+        """
+        print(f"Item Found: {item_name}. gathering data...")
+        item_details = self.data_manager.get_item_by_name(item_name)
         item_id = item_details.get('id') if item_details else None
         
         user_note = self.data_manager.get_item_note(item_id) if item_id else ""
@@ -359,10 +411,10 @@ class ItemScanner:
         # Construct final data packet
         return {
             "item": item_details, 
-            "trade": self.data_manager.find_trades_for_item(best_name),
-            "hideout": self.data_manager.find_hideout_requirements(best_name, lang_code=self.json_lang_code), 
-            "project": self.data_manager.find_project_requirements(best_name, lang_code=self.json_lang_code),
-            "quests": self.data_manager.find_quest_requirements(best_name, lang_code=self.json_lang_code),
+            "trade": self.data_manager.find_trades_for_item(item_name),
+            "hideout": self.data_manager.find_hideout_requirements(item_name, lang_code=self.json_lang_code), 
+            "project": self.data_manager.find_project_requirements(item_name, lang_code=self.json_lang_code),
+            "quests": self.data_manager.find_quest_requirements(item_name, lang_code=self.json_lang_code),
             "blueprint": is_bp,
             "note": user_note,
             "stash_count": stash_count,

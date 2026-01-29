@@ -111,10 +111,10 @@ class DataManager:
         for iid, note in notes.items(): self.db.set_item_note(iid, note)
         
         tracked = json_data.get('tracked_items', {})
-        if isinstance(tracked, list): # Handle old list format
+        if isinstance(tracked, list):  # Handle old list format
             for iid in tracked: self.db.set_item_tracked(iid, True)
         elif isinstance(tracked, dict):
-                self.db.set_item_tracked(iid, True)
+            for iid in tracked: self.db.set_item_tracked(iid, True)
 
         # Quests
         quests = json_data.get('quests', {})
