@@ -23,7 +23,7 @@ from modules.config_manager import ConfigManager
 # --- SCIPY IMPORTS REMOVED HERE ---
 # (They used to be here, but we deleted them because we use OpenCV now)
 
-APP_VERSION = "1.3.1"
+APP_VERSION = "1.3.2"
 APP_UPDATE_URL = "https://arc-companion.xyz/check_update.php"
 
 @dataclass

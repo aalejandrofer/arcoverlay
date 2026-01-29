@@ -6,7 +6,7 @@
 
 **Arc Overlay** is a powerful, real-time overlay tool designed to enhance your gaming experience. By utilizing advanced OCR (Optical Character Recognition) and screen scanning technologies, it provides instant information about items, quests, and progression without requiring you to leave the game.
 
-![Version](https://img.shields.io/badge/version-1.3.1-blue)
+![Version](https://img.shields.io/badge/version-1.3.2-blue)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
 > [!IMPORTANT]
