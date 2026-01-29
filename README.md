@@ -79,3 +79,7 @@ The installer will be generated in the `dist/` directory.
 ## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## AI Development
+
+This project has been developed with the assistance of AI tools, specially models like Gemini 3 Pro and Gemini 3 Flash Preview in combination with Antigravity IDE.

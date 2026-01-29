@@ -34,9 +34,9 @@ class SettingsWindow(BasePage):
         'project': ('Project Reqs', 'show_project_reqs'),
         'recycle': ('Recycles Into', 'show_recycles_into'),
         'salvage': ('Salvages Into', 'show_salvages_into'),
-        'recommendation': ('Recommendation', 'show_recommendation')
+        'salvage': ('Salvages Into', 'show_salvages_into')
     }
-    DEFAULT_ORDER = ['storage', 'trader', 'notes', 'crafting', 'hideout', 'project', 'recycle', 'salvage', 'recommendation']
+    DEFAULT_ORDER = ['storage', 'trader', 'notes', 'crafting', 'hideout', 'project', 'recycle', 'salvage']
     DEFAULT_OCR_COLOR = (249, 238, 223)
 
     def __init__(self, config_manager, data_manager=None, on_save_callback=None):
@@ -476,20 +476,6 @@ class SettingsWindow(BasePage):
         l_mod.addWidget(self.chk_future_hideout)
         l_mod.addWidget(self.chk_future_project)
 
-        # Recommendation Format
-        rec_format_layout = QHBoxLayout()
-        rec_format_label = QLabel("Recommendation Format:")
-        rec_format_label.setStyleSheet("color: #E0E6ED; font-size: 13px; min-width: 150px; border:none; background:transparent;")
-        rec_format_layout.addWidget(rec_format_label)
-
-        self.cmb_recommendation_format = QComboBox()
-        self.cmb_recommendation_format.addItems(["Original", "Uppercase", "Title Case", "Lowercase"])
-        self.cmb_recommendation_format.setStyleSheet("QComboBox { background: #2C313C; color: #E0E6ED; border: 1px solid #3E4451; padding: 5px; border-radius: 4px; }")
-        self.cmb_recommendation_format.currentTextChanged.connect(self.update_preview)
-        rec_format_layout.addWidget(self.cmb_recommendation_format)
-        rec_format_layout.addStretch()
-
-        l_mod.addLayout(rec_format_layout)
         left_col.addWidget(card_mod)
 
         lbl_list = QLabel("Order & Visibility (Drag to reorder)")
@@ -587,7 +573,9 @@ class SettingsWindow(BasePage):
             else: d = v
             val_lbl.setText(f"{d:.1f}{suffix}" if float_scale else f"{d}{suffix}")
 
-        if callback: callback()
+        if callback:
+            slider.valueChanged.connect(lambda: callback())
+            callback()
         slider.valueChanged.connect(update_lbl)
 
         row.addWidget(slider)
@@ -623,11 +611,16 @@ class SettingsWindow(BasePage):
         # SAFETY CHECK
         if not hasattr(self, 'item_font_size'): return
 
-        # Clear existing layout
-        while self.p_layout.count():
-            item = self.p_layout.itemAt(0)
-            if item.widget(): item.widget().setParent(None)
-            else: self.p_layout.removeItem(item)
+        def clear_layout(layout):
+            if layout is None: return
+            while layout.count():
+                child = layout.takeAt(0)
+                if child.widget():
+                    child.widget().deleteLater()
+                elif child.layout():
+                    clear_layout(child.layout())
+
+        clear_layout(self.p_layout)
 
         # Create Dummy Context for Preview
         # We simulate a "Vita Spray" or similar item
@@ -637,18 +630,21 @@ class SettingsWindow(BasePage):
                 'name': {'en': 'Vita Spray'}, 
                 'rarity': 'Epic',
                 'value': 14500,
-                'imageFilename': 'vita_spray.png', # Assuming this image exists or falls back
-                'recommendation': 'keep',
-                'recyclesInto': {'circuit_board': 1} # Mock ID
+                'imageFilename': 'vita_spray.png',
+                'recyclesInto': {'circuit_board': 1},
+                'salvagesInto': {'scrap_metal': 3}
             },
             'hideout_reqs': [['Med Bay (Lvl 2): x3', 'next', False]],
             'project_reqs': [['Radio Tower (Ph2): x1', 'future', False]],
-            'quest_reqs': [],
+            'quest_reqs': [['Collect Samples: x3', True, False]],
+            'trade_info': [{'trader': 'Celeste', 'cost': {'itemId': 'assorted_seeds', 'quantity': 1}}],
+            'crafting_info': [['Assault Rifle (Lv3): x2', 'next', False]],
             'stash_count': 4,
+            'user_note': 'quest item, keep',
             'is_tracked': False,
             'toggle_track_callback': None
         }
-
+ 
         # Mock Data Manager for Name Lookups
         class MockDataManager:
             def __init__(self):
@@ -656,9 +652,9 @@ class SettingsWindow(BasePage):
             def get_localized_name(self, item, lang='en'):
                 if isinstance(item, dict): return item.get('name', {}).get('en', 'Unknown')
                 if item == 'circuit_board': return "Circuit Board"
-                return "Unknown Item"
-            def get_item_tags(self, iid):
-                return ["quest item", "keep"]
+                if item == 'scrap_metal': return "Scrap Metal"
+                if item == 'assorted_seeds': return "Assorted Seeds"
+                return str(item).replace('_', ' ').title()
             def is_item_tracked(self, iid): return False
 
         # Use the renderer
@@ -706,6 +702,11 @@ class SettingsWindow(BasePage):
 
         proxy_cfg = ProxySettings(self)
         
+        # Apply border color to preview frame
+        rarity = dummy_data['item_data'].get('rarity', 'Common')
+        rarity_color = Constants.RARITY_COLORS.get(rarity, "#FFFFFF")
+        self.preview_frame.setStyleSheet(self.preview_frame.styleSheet().replace("border-top: 3px solid #555;", f"border-top: 3px solid {rarity_color};"))
+
         OverlayRenderer.populate(self.p_layout, dummy_data, proxy_cfg, MockDataManager(), "en")
         
         self.p_layout.addStretch()
@@ -742,35 +743,28 @@ class SettingsWindow(BasePage):
         self.chk_ultrawide.setChecked(self.cfg.get_full_screen_scan())
         self.chk_debug_save.setChecked(self.cfg.get_save_debug_images())
 
-        # Recommendation format
-        if hasattr(self, 'cmb_recommendation_format'):
-            format_val = self.cfg.get_recommendation_format()
-            format_map = {'original': 'Original', 'uppercase': 'Uppercase', 'title': 'Title Case', 'lowercase': 'Lowercase'}
-            format_display = format_map.get(format_val, 'Original')
-            idx = self.cmb_recommendation_format.findText(format_display)
-            if idx >= 0:
-                self.cmb_recommendation_format.setCurrentIndex(idx)
-            else:
-                self.cmb_recommendation_format.setCurrentIndex(0)
 
         is_fresh_config = not self.cfg.parser.has_section('ItemOverlay')
         saved_order = [x.strip() for x in self.cfg.get_overlay_section_order().split(',') if x.strip() in self.SECTIONS]
         for k in self.DEFAULT_ORDER:
             if k not in saved_order: saved_order.append(k)
 
+        self.overlay_order_list.blockSignals(True)
         self.overlay_order_list.clear()
         for key in saved_order:
             item = QListWidgetItem(self.SECTIONS[key][0]); item.setData(Qt.ItemDataRole.UserRole, key)
             item.setCheckState(Qt.CheckState.Checked if self.cfg.get_bool('ItemOverlay', self.SECTIONS[key][1], True) else Qt.CheckState.Unchecked)
             self.overlay_order_list.addItem(item)
+        self.overlay_order_list.blockSignals(False)
         if is_fresh_config: self._force_save_defaults(saved_order)
 
         self.quest_font_size.setValue(self.cfg.get_quest_font_size())
         self.quest_width.setValue(self.cfg.get_quest_width())
         self.quest_opacity.setValue(self.cfg.get_quest_opacity())
         self.quest_duration.setValue(int(self.cfg.get_quest_duration() * 10))
-
-        self.update_preview()
+ 
+        # Trigger preview with a tiny delay to ensure everything is initialized
+        QTimer.singleShot(100, self.update_preview)
 
     def _force_save_defaults(self, order_list):
         self.cfg.set('ItemOverlay', 'section_order', ",".join(order_list))
@@ -887,12 +881,6 @@ class SettingsWindow(BasePage):
             self.quest_duration.value()/10.0
         )
 
-        # Recommendation format
-        if hasattr(self, 'cmb_recommendation_format'):
-            format_display = self.cmb_recommendation_format.currentText()
-            format_map = {'Original': 'original', 'Uppercase': 'uppercase', 'Title Case': 'title', 'Lowercase': 'lowercase'}
-            format_val = format_map.get(format_display, 'original')
-            self.cfg.set_recommendation_format(format_val)
 
         self.cfg.save()
         if self.hotkey_btn.current_key_string != self.start_hotkey_price or self.quest_hotkey_btn.current_key_string != self.start_hotkey_quest or self.hub_hotkey_btn.current_key_string != self.start_hotkey_hub:

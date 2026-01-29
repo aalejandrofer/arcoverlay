@@ -1,20 +1,43 @@
 # Python
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
 venv/
+.venv/
 .env
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Testing / Coverage
+.pytest_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+.mypy_cache/
+.ruff_cache/
 
 # Build
 build/
 dist/
 
-#data
+# Data
 data/
 
-#
-# IDE
+# IDEs
 .vscode/
 .idea/
+*.swp
+*.swo
 
+# OS
 .DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Other
 uv.lock

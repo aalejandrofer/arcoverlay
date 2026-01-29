@@ -178,10 +178,8 @@ class ItemInspectorPanel(QFrame):
         n_lbl = QLabel("USER NOTES:"); n_lbl.setStyleSheet("font-weight: bold; color: #DDD; margin-top: 15px; border-bottom: 1px solid #444;"); self.scroll_layout.addWidget(n_lbl)
         self.note_edit = QTextEdit(); self.note_edit.setPlaceholderText("Write personal notes here..."); self.note_edit.setStyleSheet("background-color: #111; color: #E5C07B; border: 1px solid #444; border-radius: 4px; padding: 5px;"); self.note_edit.setFixedHeight(80); self.note_edit.textChanged.connect(self._on_note_change); self.scroll_layout.addWidget(self.note_edit)
         
-        t_lbl = QLabel("CUSTOM TAGS (shared in scanner):"); t_lbl.setStyleSheet("font-weight: bold; color: #DDD; margin-top: 15px; border-bottom: 1px solid #444;"); self.scroll_layout.addWidget(t_lbl)
-        self.tags_edit = QLineEdit(); self.tags_edit.setPlaceholderText("e.g. Needed for Quest X | Crafting..."); self.tags_edit.setStyleSheet("background-color: #111; color: #FFD700; border: 1px solid #444; border-radius: 4px; padding: 5px;"); self.tags_edit.textChanged.connect(self._on_tags_change); self.scroll_layout.addWidget(self.tags_edit)
-
         self.scroll_layout.addStretch()
+
         self.details_scroll.setWidget(scroll_c); self.c_layout.addWidget(self.details_scroll); self.main_layout.addWidget(self.content_container)
     def _create_adj_btn(self, text, bg_color):
         btn = QPushButton(text); btn.setFixedSize(55, 30); btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -217,9 +215,6 @@ class ItemInspectorPanel(QFrame):
         else: icon_lbl.setVisible(False); val_lbl.setText(f"£{price_val:,}")
         self.stat_labels["w"][0].setText(f"{item.get('weightKg', 0)}kg"); self.stat_labels["stack"][0].setText(str(stack_size)); self.stat_labels["type"][0].setText(item_type)
         self.note_edit.blockSignals(True); self.note_edit.setPlainText(self.data_manager.get_item_note(item.get('id'))); self.note_edit.blockSignals(False)
-        self.tags_edit.blockSignals(True)
-        self.tags_edit.setText(" | ".join(self.data_manager.get_item_tags(item.get('id'))))
-        self.tags_edit.blockSignals(False)
         while self.req_layout.count(): child = self.req_layout.takeAt(0); (child.widget().deleteLater() if child.widget() else None)
         if any(req_details.values()):
             self.req_label.setVisible(True); self._add_reqs("QUESTS", req_details.get('quest'), "#4CAF50"); self._add_reqs("HIDEOUT", req_details.get('hideout'), "#2196F3"); self._add_reqs("PROJECTS", req_details.get('project'), "#FF9800")
@@ -251,10 +246,6 @@ class ItemInspectorPanel(QFrame):
     def _scroll_to_notes(self): self.note_edit.setFocus(); bar = self.details_scroll.verticalScrollBar(); bar.setValue(bar.maximum())
     def _on_note_change(self):
         if self.current_item: self.data_manager.set_item_note(self.current_item.get('id'), self.note_edit.toPlainText())
-    def _on_tags_change(self):
-        if self.current_item:
-            tags = [t.strip() for t in self.tags_edit.text().split('|') if t.strip()]
-            self.data_manager.set_item_tags(self.current_item.get('id'), tags)
     def _toggle_track(self):
         if not self.current_item: return
         iid = self.current_item.get('id')
