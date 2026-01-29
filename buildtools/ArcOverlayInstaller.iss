@@ -2,7 +2,7 @@
 
 [Setup]
 AppName=ArcOverlay
-AppVersion=1.3.1
+AppVersion=1.4.0
 DefaultDirName={autopf}\ArcOverlay
 DefaultGroupName=ArcOverlay
 UninstallDisplayIcon={app}\ArcOverlay.exe

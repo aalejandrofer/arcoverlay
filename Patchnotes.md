@@ -1,5 +1,16 @@
 # Patch Notes
 
+## [1.4.0] - 2026-01-29
+
+### Added
+
+- preparing for new major feature set.
+
+### Removed
+
+- **Update Logic & Repository Links**: Removed all scripts (`app_updater.py`, `update_checker.py`) and code related to application updates. The app is now independent of the old repository and update servers.
+- **Updates Tab**: Removed the "Updates" tab from the settings window to reflect the removal of update services.
+
 ## [1.3.2] - 2026-01-29
 
 ### Added

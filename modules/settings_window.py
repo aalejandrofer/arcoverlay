@@ -18,9 +18,6 @@ from .overlay_ui import OverlayRenderer
 
 class SettingsWindow(BasePage):
     # Signals
-    request_data_update = pyqtSignal()
-    request_lang_download = pyqtSignal(str)
-    request_app_update = pyqtSignal()
     hotkeys_updated = pyqtSignal()
     progress_saved = pyqtSignal() # Add this if missing from original file, based on usage in ProgressHubWindow
     data_restored = pyqtSignal()
@@ -33,7 +30,6 @@ class SettingsWindow(BasePage):
         'hideout': ('Hideout Reqs', 'show_hideout_reqs'),
         'project': ('Project Reqs', 'show_project_reqs'),
         'recycle': ('Recycles Into', 'show_recycles_into'),
-        'salvage': ('Salvages Into', 'show_salvages_into'),
         'salvage': ('Salvages Into', 'show_salvages_into')
     }
     DEFAULT_ORDER = ['storage', 'trader', 'notes', 'crafting', 'hideout', 'project', 'recycle', 'salvage']
@@ -72,7 +68,6 @@ class SettingsWindow(BasePage):
         self.tabs.addTab(self.setup_data_tab(), "Data Management")
         self.tabs.addTab(self.setup_item_overlay_tab(), "Item Overlay")
         self.tabs.addTab(self.setup_quest_overlay_tab(), "Quest Overlay")
-        self.tabs.addTab(self.setup_updates_tab(), "Updates")
 
         self.footer_layout.addStretch()
 
@@ -304,243 +299,69 @@ class SettingsWindow(BasePage):
         l_card.addLayout(btn_layout)
 
         layout.addWidget(card)
-
-        layout.addWidget(card)
         layout.addStretch()
 
         return page
 
     def _backup_data(self):
         try:
-            # 1. Ask user for destination directory
             dest_dir = QFileDialog.getExistingDirectory(self, "Select Backup Location")
-            if not dest_dir:
-                return
-
-            # 2. Generate filename
+            if not dest_dir: return
             timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
             zip_filename = f"ArcCompanion_Backup_{timestamp}.zip"
             zip_path = os.path.join(dest_dir, zip_filename)
-
-            # 3. Create Zip
             files_to_backup = [Constants.PROGRESS_FILE, Constants.CONFIG_FILE]
-
             with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
                 for file_path in files_to_backup:
                     if os.path.exists(file_path):
-                        # Arc inside the zip will be just the filename (flat structure)
-                        # or we could keep 'data/' prefix.
-                        # Let's keep it simple: just the filename. It's easier for users to find.
                         zipf.write(file_path, arcname=os.path.basename(file_path))
-
             QMessageBox.information(self, "Backup Successful", f"Backup created successfully:\n{zip_path}")
-
         except Exception as e:
             QMessageBox.warning(self, "Backup Failed", f"An error occurred while creating backup:\n{e}")
 
     def _restore_data(self):
         try:
             zip_path, _ = QFileDialog.getOpenFileName(self, "Select Backup File", "", "Zip Files (*.zip)")
-            if not zip_path:
-                return
-
+            if not zip_path: return
             with zipfile.ZipFile(zip_path, 'r') as zipf:
-                # Validate contents
                 file_list = zipf.namelist()
                 has_progress = os.path.basename(Constants.PROGRESS_FILE) in file_list
                 has_config = os.path.basename(Constants.CONFIG_FILE) in file_list
-
                 if not has_progress and not has_config:
-                    QMessageBox.warning(self, "Invalid Backup", "The selected zip file does not contain a valid ArcCompanion backup (progress.json or config.ini).")
+                    QMessageBox.warning(self, "Invalid Backup", "The selected zip file does not contain a valid backup.")
                     return
-
-                # Confirm
-                reply = QMessageBox.question(self, "Confirm Restore",
-                                             "This will OVERWRITE your current settings and progress.\nAre you sure you want to proceed?",
-                                             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-
+                reply = QMessageBox.question(self, "Confirm Restore", "This will OVERWRITE your current settings and progress.\nAre you sure?", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
                 if reply == QMessageBox.StandardButton.Yes:
                     target_files = [os.path.basename(Constants.PROGRESS_FILE), os.path.basename(Constants.CONFIG_FILE)]
-
                     for filename in target_files:
                         if filename in file_list:
                              target_path = os.path.join(Constants.DATA_DIR, filename)
                              with zipf.open(filename) as source, open(target_path, "wb") as target:
                                  shutil.copyfileobj(source, target)
-
-                    # --- CRITICAL FIX: Reload in-memory data ---
-
-                    # 1. Reload User Progress
-                    if self.data_manager:
-                        self.data_manager.reload_progress()
-
-                    # 2. Reload Configuration
-                    self.cfg.load()
-
-                    # 3. Reload UI settings
-                    self.load_settings()
-
-                    # 4. Trigger global refresh (if callback provided)
-                    if self.on_save_callback:
-                        self.on_save_callback()
-
-                    # 5. Emit restored signal
+                    if self.data_manager: self.data_manager.reload_progress()
+                    self.cfg.load(); self.load_settings()
+                    if self.on_save_callback: self.on_save_callback()
                     self.data_restored.emit()
-
                     QMessageBox.information(self, "Restore Successful", "Data restored and reloaded successfully.")
-
         except Exception as e:
             QMessageBox.warning(self, "Restore Failed", f"An error occurred while restoring backup:\n{e}")
 
-    # --- UPDATES TAB ---
-    def setup_updates_tab(self):
-        page = QWidget(); layout = QVBoxLayout(page); layout.setContentsMargins(10, 10, 10, 10); layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-        layout.addWidget(QLabel("Update Management", objectName="Header"))
-        card_upd = SettingsCard(); l_upd = QVBoxLayout(card_upd); l_upd.setContentsMargins(15, 15, 15, 15); l_upd.setSpacing(12)
-        row_data = QHBoxLayout(); data_lbl_layout = QVBoxLayout(); data_lbl_layout.setSpacing(2); data_lbl_layout.addWidget(QLabel("Game Data & Information:", styleSheet="color: #ABB2BF; font-weight: bold; border: none; background: transparent; font-size: 14px;")); self.update_status_label = QLabel("Ready"); self.update_status_label.setStyleSheet("font-size: 12px; color: #E0E6ED; border: none; background: transparent; font-style: italic;"); data_lbl_layout.addWidget(self.update_status_label); row_data.addLayout(data_lbl_layout); row_data.addStretch(); data_check_btn = QPushButton("Sync Game Data"); data_check_btn.setFixedWidth(180); data_check_btn.setFixedHeight(30); data_check_btn.setObjectName("action_button_green"); data_check_btn.setCursor(Qt.CursorShape.PointingHandCursor); data_check_btn.setStyleSheet("QPushButton { font-size: 12px; }"); data_check_btn.clicked.connect(self.request_data_update.emit); row_data.addWidget(data_check_btn); l_upd.addLayout(row_data)
-        
-        # Attribution
-        attr_layout = QVBoxLayout()
-        attr_layout.setSpacing(2)
-        attr_title = QLabel("Data provided by:")
-        attr_title.setStyleSheet("color: #ABB2BF; font-size: 11px; margin-top: 10px; border: none; background: transparent;")
-        attr_layout.addWidget(attr_title)
-
-        github_link = QLabel("• RaidTheory/arcraiders-data (GitHub)")
-        github_link.setStyleSheet("color: #61AFEF; font-size: 11px; border: none; background: transparent; padding-left: 5px;")
-        github_link.setCursor(Qt.CursorShape.PointingHandCursor)
-        github_link.mousePressEvent = lambda e: QDesktopServices.openUrl(QUrl("https://github.com/RaidTheory/arcraiders-data"))
-        attr_layout.addWidget(github_link)
-
-        web_link = QLabel("• ArcTracker.io")
-        web_link.setStyleSheet("color: #61AFEF; font-size: 11px; border: none; background: transparent; padding-left: 5px;")
-        web_link.setCursor(Qt.CursorShape.PointingHandCursor)
-        web_link.mousePressEvent = lambda e: QDesktopServices.openUrl(QUrl("https://arctracker.io"))
-        attr_layout.addWidget(web_link)
-
-        l_upd.addLayout(attr_layout)
-        
-        layout.addWidget(card_upd)
-        return page
-
     # --- ITEM OVERLAY TAB ---
     def setup_item_overlay_tab(self):
-        page = QWidget()
-        layout = QVBoxLayout(page)
-        layout.setContentsMargins(10, 10, 10, 10)
-        layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-
-        splitter = QHBoxLayout()
-        splitter.setSpacing(15)
-        left_col = QVBoxLayout()
-
-        # Appearance Card
-        card_app = SettingsCard()
-        l_app = QVBoxLayout(card_app)
-        l_app.setContentsMargins(10, 10, 10, 10)
-
+        page = QWidget(); layout = QVBoxLayout(page); layout.setContentsMargins(10, 10, 10, 10); layout.setAlignment(Qt.AlignmentFlag.AlignTop); splitter = QHBoxLayout(); splitter.setSpacing(15); left_col = QVBoxLayout()
+        card_app = SettingsCard(); l_app = QVBoxLayout(card_app); l_app.setContentsMargins(10, 10, 10, 10)
         self.item_font_size = self._create_slider(l_app, "Font Size:", 8, 24, 12, "pt", lambda: self.update_preview())
         self.item_duration = self._create_slider(l_app, "Duration:", 1, 10, 3, "s", float_scale=True)
         self.item_opacity = self._create_slider(l_app, "Opacity:", 20, 100, 98, "%")
-
-        # Offsets
         l_app.addSpacing(5)
         self.slider_offset_x = self._create_slider(l_app, "Offset X:", -1000, 1000, 0, "px", step_scale=50)
         self.slider_offset_y = self._create_slider(l_app, "Offset Y:", -1000, 1000, 0, "px", step_scale=50)
-
-        # Anchor (Position)
-        from PyQt6.QtWidgets import QComboBox
-        wrapper = QHBoxLayout()
-        wrapper.addWidget(QLabel("Position:", styleSheet="color: #E0E6ED; font-size: 13px; min-width: 80px; border:none; background:transparent;"))
-        self.cmb_anchor = QComboBox()
-        self.cmb_anchor.addItems([
-            "Mouse",
-            "Top Left", "Top Center", "Top Right",
-            "Center Left", "Center", "Center Right",
-            "Bottom Left", "Bottom Center", "Bottom Right"
-        ])
-        self.cmb_anchor.setStyleSheet("QComboBox { background: #2C313C; color: #E0E6ED; border: 1px solid #3E4451; padding: 5px; border-radius: 4px; }")
-        wrapper.addWidget(self.cmb_anchor)
-        l_app.addLayout(wrapper)
-
-        left_col.addWidget(card_app)
-
-        # Modifiers Card
-        card_mod = SettingsCard()
-        l_mod = QVBoxLayout(card_mod)
-        l_mod.setContentsMargins(10, 10, 10, 10)
-
-        self.chk_future_hideout = ModernToggle("Show All Future Hideout Requirements")
-        self.chk_future_project = ModernToggle("Show All Future Project Requirements")
-
-        l_mod.addWidget(self.chk_future_hideout)
-        l_mod.addWidget(self.chk_future_project)
-
-        left_col.addWidget(card_mod)
-
-        lbl_list = QLabel("Order & Visibility (Drag to reorder)")
-        lbl_list.setStyleSheet("font-weight: bold; margin-top: 5px; color: #9DA5B4; border:none; background:transparent;")
-        left_col.addWidget(lbl_list)
-
-        self.overlay_order_list = QListWidget()
-        self.overlay_order_list.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
-        self.overlay_order_list.setDefaultDropAction(Qt.DropAction.MoveAction)
-        self.overlay_order_list.setStyleSheet("""
-            QListWidget { background-color: #232834; border: 1px solid #333; border-radius: 4px; outline: 0; }
-            QListWidget::item { padding: 4px; background-color: #1A1F2B; border-bottom: 1px solid #333; margin: 2px; color: #E0E6ED; }
-            QListWidget::item:selected { background-color: #3E4451; border: 1px solid #4476ED; }
-            QListWidget::indicator { width: 20px; height: 20px; border: 1px solid #555; background: #15181E; border-radius: 3px; margin-right: 10px; }
-            QListWidget::indicator:hover { border: 1px solid #4CAF50; }
-            QListWidget::indicator:checked { background-color: #4CAF50; border: 1px solid #4CAF50; image: url(data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjQiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBvbHlsaW5lIHBvaW50cz0iMjAgNiA5IDE3IDQgMTIiPjwvcG9seWxpbmU+PC9zdmc+); }
-        """)
-        self.overlay_order_list.setFixedHeight(315)
-        self.overlay_order_list.itemChanged.connect(self.update_preview)
-        self.overlay_order_list.model().rowsMoved.connect(self.update_preview)
-
-        left_col.addWidget(self.overlay_order_list)
-        splitter.addLayout(left_col, stretch=3)
-
-        # Right Column (Preview)
-        right_col = QVBoxLayout()
-        right_col.setAlignment(Qt.AlignmentFlag.AlignTop)
-        right_col.addWidget(QLabel("Live Preview", alignment=Qt.AlignmentFlag.AlignCenter, styleSheet="border:none; background:transparent; font-weight:bold; color: #ABB2BF;"))
-
-        self.preview_frame = QFrame()
-        self.preview_frame.setFixedWidth(300)
-        
-        # Updated to match Overlay Glassmorphism
-        self.preview_frame.setStyleSheet("""
-            QFrame {
-                background-color: qlineargradient(spread:pad, x1:0, y1:0, x2:1, y2:1, 
-                                                  stop:0 rgba(35, 39, 47, 240), 
-                                                  stop:1 rgba(22, 26, 33, 250));
-                border: 1px solid rgba(255, 255, 255, 0.1);
-                border-top: 3px solid #555;
-                border-radius: 8px;
-            }
-            QLabel { color: #E0E6ED; background: transparent; border: none; }
-        """)
-
-        # Shadow (Keep standard)
-        shadow = QGraphicsDropShadowEffect()
-        shadow.setBlurRadius(25)
-        shadow.setXOffset(0)
-        shadow.setYOffset(6)
-        shadow.setColor(QColor(0, 0, 0, 180))
-        self.preview_frame.setGraphicsEffect(shadow)
-
-        self.p_layout = QVBoxLayout(self.preview_frame)
-        self.p_layout.setContentsMargins(12, 10, 12, 10)
-        self.p_layout.setSpacing(4)
-
-
-        self.p_layout.addStretch()
-
-        right_col.addWidget(self.preview_frame)
-        splitter.addLayout(right_col, stretch=2)
-
-        layout.addLayout(splitter)
-        return page
+        wrapper = QHBoxLayout(); wrapper.addWidget(QLabel("Position:", styleSheet="color: #E0E6ED; font-size: 13px; min-width: 80px; border:none; background:transparent;"))
+        self.cmb_anchor = QComboBox(); self.cmb_anchor.addItems(["Mouse", "Top Left", "Top Center", "Top Right", "Center Left", "Center", "Center Right", "Bottom Left", "Bottom Center", "Bottom Right"]); self.cmb_anchor.setStyleSheet("QComboBox { background: #2C313C; color: #E0E6ED; border: 1px solid #3E4451; padding: 5px; border-radius: 4px; }"); wrapper.addWidget(self.cmb_anchor); l_app.addLayout(wrapper); left_col.addWidget(card_app)
+        card_mod = SettingsCard(); l_mod = QVBoxLayout(card_mod); l_mod.setContentsMargins(10, 10, 10, 10); self.chk_future_hideout = ModernToggle("Show All Future Hideout Requirements"); self.chk_future_project = ModernToggle("Show All Future Project Requirements"); l_mod.addWidget(self.chk_future_hideout); l_mod.addWidget(self.chk_future_project); left_col.addWidget(card_mod)
+        lbl_list = QLabel("Order & Visibility (Drag to reorder)"); lbl_list.setStyleSheet("font-weight: bold; margin-top: 5px; color: #9DA5B4; border:none; background:transparent;"); left_col.addWidget(lbl_list)
+        self.overlay_order_list = QListWidget(); self.overlay_order_list.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove); self.overlay_order_list.setDefaultDropAction(Qt.DropAction.MoveAction); self.overlay_order_list.setStyleSheet("QListWidget { background-color: #232834; border: 1px solid #333; border-radius: 4px; outline: 0; } QListWidget::item { padding: 4px; background-color: #1A1F2B; border-bottom: 1px solid #333; margin: 2px; color: #E0E6ED; } QListWidget::indicator { width: 20px; height: 20px; border: 1px solid #555; background: #15181E; border-radius: 3px; margin-right: 10px; } QListWidget::indicator:checked { background-color: #4CAF50; border: 1px solid #4CAF50; image: url(data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjQiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBvbHlsaW5lIHBvaW50cz0iMjAgNiA5IDE3IDQgMTIiPjwvcG9seWxpbmU+PC9zdmc+); }"); self.overlay_order_list.setFixedHeight(315); self.overlay_order_list.itemChanged.connect(self.update_preview); self.overlay_order_list.model().rowsMoved.connect(self.update_preview); left_col.addWidget(self.overlay_order_list); splitter.addLayout(left_col, stretch=3)
+        right_col = QVBoxLayout(); right_col.setAlignment(Qt.AlignmentFlag.AlignTop); right_col.addWidget(QLabel("Live Preview", alignment=Qt.AlignmentFlag.AlignCenter, styleSheet="border:none; background:transparent; font-weight:bold; color: #ABB2BF;")); self.preview_frame = QFrame(); self.preview_frame.setFixedWidth(300); self.preview_frame.setStyleSheet("QFrame { background-color: qlineargradient(spread:pad, x1:0, y1:0, x2:1, y2:1, stop:0 rgba(35, 39, 47, 240), stop:1 rgba(22, 26, 33, 250)); border: 1px solid rgba(255, 255, 255, 0.1); border-top: 3px solid #555; border-radius: 8px; } QLabel { color: #E0E6ED; background: transparent; border: none; }"); shadow = QGraphicsDropShadowEffect(); shadow.setBlurRadius(25); shadow.setXOffset(0); shadow.setYOffset(6); shadow.setColor(QColor(0, 0, 0, 180)); self.preview_frame.setGraphicsEffect(shadow); self.p_layout = QVBoxLayout(self.preview_frame); self.p_layout.setContentsMargins(12, 10, 12, 10); self.p_layout.setSpacing(4); self.p_layout.addStretch(); right_col.addWidget(self.preview_frame); splitter.addLayout(right_col, stretch=2); layout.addLayout(splitter); return page
 
     # --- QUEST OVERLAY TAB ---
     def setup_quest_overlay_tab(self):
@@ -548,41 +369,12 @@ class SettingsWindow(BasePage):
 
     # --- HELPERS ---
     def _create_slider(self, layout, label, min_v, max_v, default, suffix, callback=None, float_scale=False, step_scale=1):
-        row = QHBoxLayout()
-        row.addWidget(QLabel(label, styleSheet="color: #E0E6ED; font-size: 13px; min-width: 80px; border:none; background:transparent;"))
-
-        val_lbl = QLabel(f"{default}{suffix}")
-        val_lbl.setFixedWidth(50)
-        val_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        val_lbl.setStyleSheet("color: #4476ED; font-weight: bold; border:none; background:transparent;")
-
-        slider = QSlider(Qt.Orientation.Horizontal)
-        slider.setStyleSheet("QSlider::groove:horizontal { height: 4px; background: #3E4451; border-radius: 2px; } QSlider::handle:horizontal { background: #4476ED; width: 16px; margin: -6px 0; border-radius: 8px; }")
-
-        # Calculate range and default based on scaling
-        real_min = min_v * 10 if float_scale else (min_v // step_scale if step_scale > 1 else min_v)
-        real_max = max_v * 10 if float_scale else (max_v // step_scale if step_scale > 1 else max_v)
-        real_def = int(default * 10) if float_scale else (default // step_scale if step_scale > 1 else default)
-
-        slider.setRange(real_min, real_max)
-        slider.setValue(real_def)
-
+        row = QHBoxLayout(); row.addWidget(QLabel(label, styleSheet="color: #E0E6ED; font-size: 13px; min-width: 80px; border:none; background:transparent;")); val_lbl = QLabel(f"{default}{suffix}"); val_lbl.setFixedWidth(50); val_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter); val_lbl.setStyleSheet("color: #4476ED; font-weight: bold; border:none; background:transparent;"); slider = QSlider(Qt.Orientation.Horizontal); slider.setStyleSheet("QSlider::groove:horizontal { height: 4px; background: #3E4451; border-radius: 2px; } QSlider::handle:horizontal { background: #4476ED; width: 16px; margin: -6px 0; border-radius: 8px; }"); real_min = min_v * 10 if float_scale else (min_v // step_scale if step_scale > 1 else min_v); real_max = max_v * 10 if float_scale else (max_v // step_scale if step_scale > 1 else max_v); real_def = int(default * 10) if float_scale else (default // step_scale if step_scale > 1 else default); slider.setRange(real_min, real_max); slider.setValue(real_def)
         def update_lbl(v):
-            if float_scale: d = v/10.0
-            elif step_scale > 1: d = v * step_scale
-            else: d = v
+            d = v/10.0 if float_scale else (v * step_scale if step_scale > 1 else v)
             val_lbl.setText(f"{d:.1f}{suffix}" if float_scale else f"{d}{suffix}")
-
-        if callback:
-            slider.valueChanged.connect(lambda: callback())
-            callback()
-        slider.valueChanged.connect(update_lbl)
-
-        row.addWidget(slider)
-        row.addWidget(val_lbl)
-        layout.addLayout(row)
-        return slider
-
+        if callback: slider.valueChanged.connect(lambda: callback())
+        slider.valueChanged.connect(update_lbl); row.addWidget(slider); row.addWidget(val_lbl); layout.addLayout(row); return slider
 
     def _create_color_spinbox(self):
         spin = QSpinBox(); spin.setRange(0, 255); spin.setFixedWidth(45); spin.setAlignment(Qt.AlignmentFlag.AlignCenter); spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons); spin.setStyleSheet("QSpinBox { background-color: #232834; color: #E0E6ED; border: 1px solid #333; padding: 4px; border-radius: 4px; font-weight: bold; } QSpinBox:focus { border: 1px solid #4476ED; }"); return spin
@@ -594,46 +386,27 @@ class SettingsWindow(BasePage):
     def _start_color_pick(self): self.btn_pick_color.setText("3..."); self.btn_pick_color.setEnabled(False); self.picker_timer.start(1000)
 
     def _perform_color_pick(self):
-        current_text = self.btn_pick_color.text()
-        if current_text == "3...": self.btn_pick_color.setText("2..."); self.picker_timer.start(1000)
-        elif current_text == "2...": self.btn_pick_color.setText("1..."); self.picker_timer.start(1000)
-        elif current_text == "1...":
+        txt = self.btn_pick_color.text()
+        if txt == "3...": self.btn_pick_color.setText("2..."); self.picker_timer.start(1000)
+        elif txt == "2...": self.btn_pick_color.setText("1..."); self.picker_timer.start(1000)
+        elif txt == "1...":
             try:
-                screen = QApplication.primaryScreen(); cursor_pos = QCursor.pos(); pixmap = screen.grabWindow(0, cursor_pos.x(), cursor_pos.y(), 1, 1); image = pixmap.toImage(); color = image.pixelColor(0, 0); self.spin_r.setValue(color.red()); self.spin_g.setValue(color.green()); self.spin_b.setValue(color.blue()); QMessageBox.information(self, "Color Picked", f"Found Color: {color.red()}, {color.green()}, {color.blue()}")
-            except Exception as e: QMessageBox.warning(self, "Error", f"Could not pick color: {e}")
+                screen = QApplication.primaryScreen(); pos = QCursor.pos(); pix = screen.grabWindow(0, pos.x(), pos.y(), 1, 1); img = pix.toImage(); col = img.pixelColor(0, 0); self.spin_r.setValue(col.red()); self.spin_g.setValue(col.green()); self.spin_b.setValue(col.blue())
+            except: pass
             self.btn_pick_color.setText("Pick Color (3s)"); self.btn_pick_color.setEnabled(True)
 
-    def _build_preview_content(self):
-        # No initial build needed, handled by update_preview dynamically
-        pass
-
     def update_preview(self):
-        # SAFETY CHECK
         if not hasattr(self, 'item_font_size'): return
-
-        def clear_layout(layout):
-            if layout is None: return
-            while layout.count():
-                child = layout.takeAt(0)
-                if child.widget():
-                    child.widget().deleteLater()
-                elif child.layout():
-                    clear_layout(child.layout())
-
-        clear_layout(self.p_layout)
-
-        # Create Dummy Context for Preview
-        # We simulate a "Vita Spray" or similar item
+        while self.p_layout.count():
+            item = self.p_layout.takeAt(0)
+            if item.widget(): item.widget().deleteLater()
+            elif item.layout():
+                while item.layout().count():
+                    sub = item.layout().takeAt(0)
+                    if sub.widget(): sub.widget().deleteLater()
+        
         dummy_data = {
-            'item_data': {
-                'id': 'vita_spray', # Placeholder ID
-                'name': {'en': 'Vita Spray'}, 
-                'rarity': 'Epic',
-                'value': 14500,
-                'imageFilename': 'vita_spray.png',
-                'recyclesInto': {'circuit_board': 1},
-                'salvagesInto': {'scrap_metal': 3}
-            },
+            'item_data': {'id': 'vita_spray', 'name': {'en': 'Vita Spray'}, 'rarity': 'Epic', 'value': 14500, 'imageFilename': 'vita_spray.png', 'recyclesInto': {'circuit_board': 1}, 'salvagesInto': {'scrap_metal': 3}},
             'hideout_reqs': [['Med Bay (Lvl 2): x3', 'next', False]],
             'project_reqs': [['Radio Tower (Ph2): x1', 'future', False]],
             'quest_reqs': [['Collect Samples: x3', True, False]],
@@ -644,252 +417,88 @@ class SettingsWindow(BasePage):
             'is_tracked': False,
             'toggle_track_callback': None
         }
- 
-        # Mock Data Manager for Name Lookups
-        class MockDataManager:
-            def __init__(self):
-                self.id_to_item_map = {}
+
+        class MockDM:
             def get_localized_name(self, item, lang='en'):
                 if isinstance(item, dict): return item.get('name', {}).get('en', 'Unknown')
-                if item == 'circuit_board': return "Circuit Board"
-                if item == 'scrap_metal': return "Scrap Metal"
-                if item == 'assorted_seeds': return "Assorted Seeds"
                 return str(item).replace('_', ' ').title()
             def is_item_tracked(self, iid): return False
 
-        # Use the renderer
-        # Note: We pass self.cfg (user_settings) but we might want to override some values 
-        # (like font size) if we want the preview to scale differently? 
-        # For strict parity, we use the actual settings.
-        
-        # However, to ensure it updates LIVE as the user drags sliders, we might need to 
-        # temporarily patch the settings object or ensure self.cfg reflects the SLIDER values 
-        # before saving. 
-        # The sliders update self.cfg values on change events? 
-        # No, usually they call `update_preview` then `save_settings` on release.
-        # Let's check how sliders are connected. 
-        # They connect to `update_preview`.
-        # We need to construct a temporary settings-like object or update self.cfg temporarily.
-        
-        # Let's create a proxy settings object that reads from the CURRENT slide values
-        class ProxySettings:
-            def __init__(self, parent): self.p = parent
-            def getint(self, section, key, fallback=0):
-                if section == 'ItemOverlay':
-                    if key == 'font_size': return self.p.item_font_size.value()
-                    # if key == 'opacity': return self.p.item_opacity.value() # Opacity doesn't affect layout content much, mostly window
-                return self.p.cfg.getint(section, key, fallback)
-            def get(self, section, key, fallback=""):
-                if section == 'ItemOverlay':
-                    if key == 'section_order':
-                         # Build order from list
-                         order = []
-                         for i in range(self.p.overlay_order_list.count()):
-                             item = self.p.overlay_order_list.item(i)
-                             if item.checkState() == Qt.CheckState.Checked:
-                                 order.append(item.data(Qt.ItemDataRole.UserRole))
-                         return ",".join(order)
-                    if key == 'anchor_mode': return "Mouse" # Force mouse visual for preview?? Or just irrelevant.
-                return self.p.cfg.get(section, key, fallback)
+        class ProxyCfg:
+            def __init__(self, p): self.p = p
+            def getint(self, s, k, f=0): return self.p.item_font_size.value() if s == 'ItemOverlay' and k == 'font_size' else self.p.cfg.getint(s, k, f)
+            def get(self, s, k, f=""):
+                if s == 'ItemOverlay' and k == 'section_order':
+                    res = []
+                    for i in range(self.p.overlay_order_list.count()):
+                        it = self.p.overlay_order_list.item(i)
+                        if it.checkState() == Qt.CheckState.Checked: res.append(it.data(Qt.ItemDataRole.UserRole))
+                    return ",".join(res)
+                return self.p.cfg.get(s, k, f)
+            def getboolean(self, s, k, f=True): return self.p.chk_future_hideout.isChecked() if k == 'show_all_future_reqs' else (self.p.chk_future_project.isChecked() if k == 'show_all_future_project_reqs' else True)
             def getfloat(self, s, k, f=0.0): return self.p.cfg.getfloat(s,k,f)
-            def getboolean(self, section, key, fallback=True):
-                # Check UI state for specific flags if needed
-                if key == 'show_all_future_reqs': return self.p.chk_future_hideout.isChecked()
-                if key == 'show_all_future_project_reqs': return self.p.chk_future_project.isChecked()
-                # For per-section visibility (e.g. show_notes), the presence in 'section_order' (filtered above) implies visibility.
-                # So we return True to allow the renderer to proceed if the section is in the order list.
-                return True
 
-        proxy_cfg = ProxySettings(self)
-        
-        # Apply border color to preview frame
-        rarity = dummy_data['item_data'].get('rarity', 'Common')
-        rarity_color = Constants.RARITY_COLORS.get(rarity, "#FFFFFF")
+        rarity_color = Constants.RARITY_COLORS.get('Epic', "#FFFFFF")
         self.preview_frame.setStyleSheet(self.preview_frame.styleSheet().replace("border-top: 3px solid #555;", f"border-top: 3px solid {rarity_color};"))
-
-        OverlayRenderer.populate(self.p_layout, dummy_data, proxy_cfg, MockDataManager(), "en")
-        
+        OverlayRenderer.populate(self.p_layout, dummy_data, ProxyCfg(self), MockDM(), "en")
         self.p_layout.addStretch()
-
-    def save_state(self): self.save_settings()
-    def reset_state(self): pass
 
     def load_settings(self):
         self.hotkey_btn.set_hotkey(self.cfg.get_item_hotkey()); self.quest_hotkey_btn.set_hotkey(self.cfg.get_quest_hotkey()); self.hub_hotkey_btn.set_hotkey(self.cfg.get_hub_hotkey())
         self.start_hotkey_price = self.hotkey_btn.current_key_string; self.start_hotkey_quest = self.quest_hotkey_btn.current_key_string; self.start_hotkey_hub = self.hub_hotkey_btn.current_key_string
-        lang_code = self.cfg.get_language()
-        for name, (json_code, tess_code) in Constants.LANGUAGES.items():
-            if tess_code == lang_code or json_code == lang_code: self.lang_combo.setCurrentText(name); break
-
-        color_str = self.cfg.get_ocr_color()
-        try: parts = [int(x.strip()) for x in color_str.split(',')]; (self.spin_r.setValue(parts[0]), self.spin_g.setValue(parts[1]), self.spin_b.setValue(parts[2])) if len(parts) == 3 else self._reset_ocr_color()
-        except ValueError: self._reset_ocr_color()
-        self._update_color_preview()
-
-        self.item_font_size.setValue(self.cfg.get_item_font_size())
-        self.item_duration.setValue(int(self.cfg.get_item_duration() * 10))
-        self.item_opacity.setValue(self.cfg.get_item_opacity())
-
-        anchor = self.cfg.get_item_anchor_mode()
-        idx = self.cmb_anchor.findText(anchor)
-        if idx >= 0: self.cmb_anchor.setCurrentIndex(idx)
-        else: self.cmb_anchor.setCurrentIndex(0)
-
-        self.slider_offset_x.setValue(self.cfg.get_item_offset_x() // 50)
-        self.slider_offset_y.setValue(self.cfg.get_item_offset_y() // 50)
-        self.chk_future_hideout.setChecked(self.cfg.get_show_future_hideout())
-        self.chk_future_project.setChecked(self.cfg.get_show_future_project())
-
-        self.chk_ultrawide.setChecked(self.cfg.get_full_screen_scan())
-        self.chk_debug_save.setChecked(self.cfg.get_save_debug_images())
-
-
-        is_fresh_config = not self.cfg.parser.has_section('ItemOverlay')
-        saved_order = [x.strip() for x in self.cfg.get_overlay_section_order().split(',') if x.strip() in self.SECTIONS]
+        lang = self.cfg.get_language()
+        for n, (j, t) in Constants.LANGUAGES.items():
+            if t == lang or j == lang: self.lang_combo.setCurrentText(n); break
+        col = self.cfg.get_ocr_color()
+        try: parts = [int(x.strip()) for x in col.split(',')]; self.spin_r.setValue(parts[0]); self.spin_g.setValue(parts[1]); self.spin_b.setValue(parts[2])
+        except: self._reset_ocr_color()
+        self._update_color_preview(); self.item_font_size.setValue(self.cfg.get_item_font_size()); self.item_duration.setValue(int(self.cfg.get_item_duration() * 10)); self.item_opacity.setValue(self.cfg.get_item_opacity())
+        idx = self.cmb_anchor.findText(self.cfg.get_item_anchor_mode()); self.cmb_anchor.setCurrentIndex(max(0, idx))
+        self.slider_offset_x.setValue(self.cfg.get_item_offset_x() // 50); self.slider_offset_y.setValue(self.cfg.get_item_offset_y() // 50)
+        self.chk_future_hideout.setChecked(self.cfg.get_show_future_hideout()); self.chk_future_project.setChecked(self.cfg.get_show_future_project()); self.chk_ultrawide.setChecked(self.cfg.get_full_screen_scan()); self.chk_debug_save.setChecked(self.cfg.get_save_debug_images())
+        saved = [x.strip() for x in self.cfg.get_overlay_section_order().split(',') if x.strip() in self.SECTIONS]
         for k in self.DEFAULT_ORDER:
-            if k not in saved_order: saved_order.append(k)
-
-        self.overlay_order_list.blockSignals(True)
-        self.overlay_order_list.clear()
-        for key in saved_order:
-            item = QListWidgetItem(self.SECTIONS[key][0]); item.setData(Qt.ItemDataRole.UserRole, key)
-            item.setCheckState(Qt.CheckState.Checked if self.cfg.get_bool('ItemOverlay', self.SECTIONS[key][1], True) else Qt.CheckState.Unchecked)
-            self.overlay_order_list.addItem(item)
-        self.overlay_order_list.blockSignals(False)
-        if is_fresh_config: self._force_save_defaults(saved_order)
-
-        self.quest_font_size.setValue(self.cfg.get_quest_font_size())
-        self.quest_width.setValue(self.cfg.get_quest_width())
-        self.quest_opacity.setValue(self.cfg.get_quest_opacity())
-        self.quest_duration.setValue(int(self.cfg.get_quest_duration() * 10))
- 
-        # Trigger preview with a tiny delay to ensure everything is initialized
+            if k not in saved: saved.append(k)
+        self.overlay_order_list.blockSignals(True); self.overlay_order_list.clear()
+        for k in saved:
+            it = QListWidgetItem(self.SECTIONS[k][0]); it.setData(Qt.ItemDataRole.UserRole, k); it.setCheckState(Qt.CheckState.Checked if self.cfg.get_bool('ItemOverlay', self.SECTIONS[k][1], True) else Qt.CheckState.Unchecked); self.overlay_order_list.addItem(it)
+        self.overlay_order_list.blockSignals(False); self.quest_font_size.setValue(self.cfg.get_quest_font_size()); self.quest_width.setValue(self.cfg.get_quest_width()); self.quest_opacity.setValue(self.cfg.get_quest_opacity()); self.quest_duration.setValue(int(self.cfg.get_quest_duration() * 10))
         QTimer.singleShot(100, self.update_preview)
-
-    def _force_save_defaults(self, order_list):
-        self.cfg.set('ItemOverlay', 'section_order', ",".join(order_list))
-        for key in order_list: self.cfg.set('ItemOverlay', self.SECTIONS[key][1], True)
-        self.cfg.set('ItemOverlay', 'show_all_future_reqs', True)
-        self.cfg.set('ItemOverlay', 'show_all_future_project_reqs', True)
-        self.cfg.set('ItemOverlay', 'offset_x', 0)
-        self.cfg.set('ItemOverlay', 'offset_y', 0)
-        self.cfg.set('ItemOverlay', 'anchor_mode', "Mouse")
-        self.cfg.set('ItemOverlay', 'opacity', 98)
-        self.cfg.save()
-
-    def reset_current_tab(self):
-        index = self.tabs.currentIndex()
-        tab_text = self.tabs.tabText(index)
-
-        reply = QMessageBox.question(self, "Confirm Reset",
-                                     f"Are you sure you want to reset the '{tab_text}' settings to their defaults?",
-                                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-
-        if reply == QMessageBox.StandardButton.Yes:
-            if tab_text == "General":
-                self._reset_general_tab()
-            elif tab_text == "Item Overlay":
-                self._reset_item_overlay_tab()
-            elif tab_text == "Quest Overlay":
-                self._reset_quest_overlay_tab()
-            # Data and Updates tabs do not have settings to reset
-
-    def _reset_general_tab(self):
-        # Language
-        lang = self.cfg.DEFAULT_LANG
-        for name, (json_code, tess_code) in Constants.LANGUAGES.items():
-            if tess_code == lang:
-                self.lang_combo.setCurrentText(name)
-                break
-
-        # Hotkeys
-        self.hotkey_btn.set_hotkey(self.cfg.DEFAULT_HOTKEY_PRICE)
-        self.quest_hotkey_btn.set_hotkey(self.cfg.DEFAULT_HOTKEY_QUEST)
-        self.hub_hotkey_btn.set_hotkey(self.cfg.DEFAULT_HOTKEY_HUB)
-
-        # OCR Color & Settings
-        self._reset_ocr_color()
-        self.chk_ultrawide.setChecked(self.cfg.DEFAULT_FULL_SCREEN)
-        self.chk_debug_save.setChecked(self.cfg.DEFAULT_DEBUG_SAVE)
-
-    def _reset_item_overlay_tab(self):
-        self.item_font_size.setValue(self.cfg.DEFAULT_ITEM_FONT)
-        self.item_duration.setValue(int(self.cfg.DEFAULT_ITEM_DURATION * 10))
-        self.slider_offset_x.setValue(self.cfg.DEFAULT_ITEM_OFFSET_X)
-        self.slider_offset_y.setValue(self.cfg.DEFAULT_ITEM_OFFSET_Y)
-        self.item_opacity.setValue(self.cfg.DEFAULT_ITEM_OPACITY)
-        self.cmb_anchor.setCurrentText(self.cfg.DEFAULT_ANCHOR_MODE)
-
-        self.chk_future_hideout.setChecked(self.cfg.DEFAULT_SHOW_FUTURE_HIDEOUT)
-        self.chk_future_project.setChecked(self.cfg.DEFAULT_SHOW_FUTURE_PROJECT)
-
-        # Reset Order
-        default_order = [x.strip() for x in self.cfg.DEFAULT_SECTION_ORDER.split(',')]
-        self.overlay_order_list.clear()
-        for key in default_order:
-            if key in self.SECTIONS:
-                item = QListWidgetItem(self.SECTIONS[key][0])
-                item.setData(Qt.ItemDataRole.UserRole, key)
-                item.setCheckState(Qt.CheckState.Checked)
-                self.overlay_order_list.addItem(item)
-
-        self.update_preview()
-
-    def _reset_quest_overlay_tab(self):
-        self.quest_font_size.setValue(self.cfg.DEFAULT_QUEST_FONT)
-        self.quest_width.setValue(self.cfg.DEFAULT_QUEST_WIDTH)
-        self.quest_opacity.setValue(self.cfg.DEFAULT_QUEST_OPACITY)
-        self.quest_duration.setValue(int(self.cfg.DEFAULT_QUEST_DURATION * 10))
 
     def save_settings(self):
         self.cfg.set('Hotkeys', 'price_check', self.hotkey_btn.current_key_string); self.cfg.set('Hotkeys', 'quest_log', self.quest_hotkey_btn.current_key_string); self.cfg.set('Hotkeys', 'hub_hotkey', self.hub_hotkey_btn.current_key_string)
-        display_name = self.lang_combo.currentText()
-        if display_name in Constants.LANGUAGES:
-            lang_code = Constants.LANGUAGES[display_name][1]; self.cfg.set_language(lang_code); target = os.path.join(Constants.TESSDATA_DIR, f"{lang_code}.traineddata")
-            if lang_code != 'eng' and not os.path.exists(target): QMessageBox.information(self, "Download Required", f"Downloading language data for {display_name}..."); self.request_lang_download.emit(lang_code)
-
-        color_str = f"{self.spin_r.value()}, {self.spin_g.value()}, {self.spin_b.value()}"
-        self.cfg.set_ocr_color(color_str)
-        self.cfg.set_full_screen_scan(self.chk_ultrawide.isChecked())
-        self.cfg.set_save_debug_images(self.chk_debug_save.isChecked())
-
-        new_order = []
-        section_states = {}
+        disp = self.lang_combo.currentText()
+        if disp in Constants.LANGUAGES: self.cfg.set_language(Constants.LANGUAGES[disp][1])
+        self.cfg.set_ocr_color(f"{self.spin_r.value()}, {self.spin_g.value()}, {self.spin_b.value()}"); self.cfg.set_full_screen_scan(self.chk_ultrawide.isChecked()); self.cfg.set_save_debug_images(self.chk_debug_save.isChecked())
+        order, states = [], {}
         for i in range(self.overlay_order_list.count()):
-            item = self.overlay_order_list.item(i)
-            key = item.data(Qt.ItemDataRole.UserRole)
-            new_order.append(key)
-            section_states[self.SECTIONS[key][1]] = (item.checkState() == Qt.CheckState.Checked)
-
-        self.cfg.set_item_overlay_settings(
-            self.item_font_size.value(),
-            self.item_duration.value()/10.0,
-            self.chk_future_hideout.isChecked(),
-            self.chk_future_project.isChecked(),
-            self.slider_offset_x.value() * 50,
-            self.slider_offset_y.value() * 50,
-            self.cmb_anchor.currentText(),
-            self.item_opacity.value(),
-            ",".join(new_order),
-            section_states
-        )
-
-        self.cfg.set_quest_overlay_settings(
-            self.quest_font_size.value(),
-            self.quest_width.value(),
-            self.quest_opacity.value(),
-            self.quest_duration.value()/10.0
-        )
-
-
+            it = self.overlay_order_list.item(i); k = it.data(Qt.ItemDataRole.UserRole); order.append(k); states[self.SECTIONS[k][1]] = (it.checkState() == Qt.CheckState.Checked)
+        self.cfg.set_item_overlay_settings(self.item_font_size.value(), self.item_duration.value()/10.0, self.chk_future_hideout.isChecked(), self.chk_future_project.isChecked(), self.slider_offset_x.value() * 50, self.slider_offset_y.value() * 50, self.cmb_anchor.currentText(), self.item_opacity.value(), ",".join(order), states)
+        self.cfg.set_quest_overlay_settings(self.quest_font_size.value(), self.quest_width.value(), self.quest_opacity.value(), self.quest_duration.value()/10.0)
         self.cfg.save()
         if self.hotkey_btn.current_key_string != self.start_hotkey_price or self.quest_hotkey_btn.current_key_string != self.start_hotkey_quest or self.hub_hotkey_btn.current_key_string != self.start_hotkey_hub:
-             self.start_hotkey_price = self.hotkey_btn.current_key_string
-             self.start_hotkey_quest = self.quest_hotkey_btn.current_key_string
-             self.start_hotkey_hub = self.hub_hotkey_btn.current_key_string
-             self.hotkeys_updated.emit()
-
+             self.start_hotkey_price = self.hotkey_btn.current_key_string; self.start_hotkey_quest = self.quest_hotkey_btn.current_key_string; self.start_hotkey_hub = self.hub_hotkey_btn.current_key_string; self.hotkeys_updated.emit()
         if self.on_save_callback: self.on_save_callback()
         QMessageBox.information(self, "Saved", "Settings saved successfully.")
 
-    def set_update_status(self, text): self.update_status_label.setText(text)
+    def reset_current_tab(self):
+        idx = self.tabs.currentIndex(); txt = self.tabs.tabText(idx)
+        if QMessageBox.question(self, "Reset", f"Reset '{txt}' to defaults?", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No) == QMessageBox.StandardButton.Yes:
+            if txt == "General": self._reset_general_tab()
+            elif txt == "Item Overlay": self._reset_item_overlay_tab()
+            elif txt == "Quest Overlay": self._reset_quest_overlay_tab()
+
+    def _reset_general_tab(self):
+        for n, (j, t) in Constants.LANGUAGES.items():
+            if t == self.cfg.DEFAULT_LANG: self.lang_combo.setCurrentText(n); break
+        self.hotkey_btn.set_hotkey(self.cfg.DEFAULT_HOTKEY_PRICE); self.quest_hotkey_btn.set_hotkey(self.cfg.DEFAULT_HOTKEY_QUEST); self.hub_hotkey_btn.set_hotkey(self.cfg.DEFAULT_HOTKEY_HUB); self._reset_ocr_color(); self.chk_ultrawide.setChecked(self.cfg.DEFAULT_FULL_SCREEN); self.chk_debug_save.setChecked(self.cfg.DEFAULT_DEBUG_SAVE)
+
+    def _reset_item_overlay_tab(self):
+        self.item_font_size.setValue(self.cfg.DEFAULT_ITEM_FONT); self.item_duration.setValue(int(self.cfg.DEFAULT_ITEM_DURATION * 10)); self.slider_offset_x.setValue(self.cfg.DEFAULT_ITEM_OFFSET_X); self.slider_offset_y.setValue(self.cfg.DEFAULT_ITEM_OFFSET_Y); self.item_opacity.setValue(self.cfg.DEFAULT_ITEM_OPACITY); self.cmb_anchor.setCurrentText(self.cfg.DEFAULT_ANCHOR_MODE); self.chk_future_hideout.setChecked(self.cfg.DEFAULT_SHOW_FUTURE_HIDEOUT); self.chk_future_project.setChecked(self.cfg.DEFAULT_SHOW_FUTURE_PROJECT); self.overlay_order_list.clear()
+        for k in self.cfg.DEFAULT_SECTION_ORDER.split(','):
+            if k.strip() in self.SECTIONS:
+                it = QListWidgetItem(self.SECTIONS[k.strip()][0]); it.setData(Qt.ItemDataRole.UserRole, k.strip()); it.setCheckState(Qt.CheckState.Checked); self.overlay_order_list.addItem(it)
+        self.update_preview()
+
+    def _reset_quest_overlay_tab(self):
+        self.quest_font_size.setValue(self.cfg.DEFAULT_QUEST_FONT); self.quest_width.setValue(self.cfg.DEFAULT_QUEST_WIDTH); self.quest_opacity.setValue(self.cfg.DEFAULT_QUEST_OPACITY); self.quest_duration.setValue(int(self.cfg.DEFAULT_QUEST_DURATION * 10))
