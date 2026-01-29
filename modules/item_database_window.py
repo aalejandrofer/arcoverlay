@@ -76,10 +76,11 @@ class ItemImageLoader(QObject):
         self.active_downloads.clear()
 
 class ItemGridCard(QFrame):
-    clicked = pyqtSignal(dict) 
+    clicked = pyqtSignal(dict)
+    double_clicked = pyqtSignal(dict) 
     def __init__(self, item, localized_name, image_loader, stash_count=0, stack_size=1, is_collected=False, is_selected=False):
         super().__init__()
-        self.item = item; self.is_selected = is_selected
+        self.item = item; self.is_selected = is_selected; self.is_collected = is_collected
         self.setFixedSize(100, 130); self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.rarity = item.get('rarity', 'Common'); self.rarity_color = Constants.RARITY_COLORS.get(self.rarity, "#777")
         self.is_bp = (item.get('type') == "Blueprint") or ("Blueprint" in item.get('name', ''))
@@ -117,22 +118,31 @@ class ItemGridCard(QFrame):
             border = f"1px solid {base_border}"
             bg_style = bg
             hover_border = self.rarity_color
+        
+        # Apply greying effect for collected blueprints
+        opacity = "0.4" if (self.is_bp and self.is_collected) else "1.0"
             
         self.setStyleSheet(f"""
             QFrame {{ 
                 background: {bg_style}; 
                 border: {border}; 
                 border-top: 3px solid {self.rarity_color}; 
-                border-radius: 8px; 
+                border-radius: 8px;
+                opacity: {opacity};
             }} 
             QFrame:hover {{ 
                 background: {bg_hover}; 
-                border-color: {hover_border}; 
+                border-color: {hover_border};
+                opacity: {opacity};
             }}
         """)
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton: self.clicked.emit(self.item)
+    
+    def mouseDoubleClickEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton and self.is_bp:
+            self.double_clicked.emit(self.item)
 
 class ItemInspectorPanel(QFrame):
     data_changed = pyqtSignal()
@@ -236,12 +246,8 @@ class ItemInspectorPanel(QFrame):
     def _toggle_blueprint(self):
         if not self.current_item: return
         iid = self.current_item.get('id'); current = self.data_manager.get_stash_count(iid); new_val = 1 if current == 0 else 0
-        if new_val > 0:
-            if self.data_manager.is_item_tracked(iid): self.data_manager.toggle_item_track(iid)
-        else:
-            if not self.data_manager.is_item_tracked(iid): self.data_manager.toggle_item_track(iid)
         self.data_manager.set_stash_count(iid, new_val)
-        self._update_bp_style(new_val > 0); self._update_track_btn_style(); self.data_changed.emit()
+        self._update_bp_style(new_val > 0); self.data_changed.emit()
     def _update_bp_style(self, collected):
         if collected: self.bp_toggle_btn.setText("COLLECTED"); self.bp_toggle_btn.setStyleSheet("QPushButton { background-color: #2E5C32; color: #4CAF50; border: 1px solid #4CAF50; font-weight: bold; font-size: 11px; border-radius: 3px; }")
         else: self.bp_toggle_btn.setText("NOT COLLECTED"); self.bp_toggle_btn.setStyleSheet("QPushButton { background-color: #3E4451; color: #AAA; border: 1px solid #555; font-weight: bold; font-size: 11px; border-radius: 3px; }")
@@ -348,19 +354,9 @@ class ItemDatabaseWindow(BasePage):
     # ... [Helper methods identical to previous logic] ...
     
     def _enforce_blueprint_defaults(self):
-        tracked = self.data_manager.get_tracked_items_data()
-        stash = self.data_manager.user_progress.get('stash_inventory', {})
-        changed = False
-        for item in self.unique_items:
-            # Blueprint check
-            if (item.get('type') == "Blueprint") or ("Blueprint" in item.get('name', '')):
-                iid = item.get('id')
-                if iid and stash.get(iid, 0) == 0 and iid not in tracked:
-                    tracked[iid] = {"tags": []}
-                    changed = True
-        if changed:
-            self.data_manager.user_progress['tracked_items'] = tracked
-            self.data_manager.save_user_progress()
+        # DISABLED: No longer auto-tracking uncollected blueprints
+        # Users can manually track blueprints if desired
+        pass
 
     def _build_requirements_cache(self):
         self.req_cache = {}
@@ -456,7 +452,9 @@ class ItemDatabaseWindow(BasePage):
             stash_count = stash.get(item.get('id'), 0)
 
             card = ItemGridCard(item, loc_name, self.image_loader, stash_count=stash_count, stack_size=stack_size, is_collected=is_collected, is_selected=is_selected)
-            card.clicked.connect(self.on_item_clicked); self.grid_layout.addWidget(card, row, col)
+            card.clicked.connect(self.on_item_clicked)
+            card.double_clicked.connect(self.on_blueprint_double_clicked)
+            self.grid_layout.addWidget(card, row, col)
             col += 1; count += 1
             if col >= max_cols: col = 0; row += 1
 
@@ -467,6 +465,22 @@ class ItemDatabaseWindow(BasePage):
             if isinstance(w, ItemGridCard): w.set_selected(w.item.get('id') == self.selected_item_id)
         reqs = self.req_cache.get(item.get('id'), {'details': {}})['details']
         self.inspector.set_item(item, reqs)
+    
+    def on_blueprint_double_clicked(self, item):
+        """Toggle blueprint collection status on double-click"""
+        iid = item.get('id')
+        current = self.data_manager.get_stash_count(iid)
+        new_val = 1 if current == 0 else 0
+        self.data_manager.set_stash_count(iid, new_val)
+        
+        # Update inspector if this item is selected
+        if self.selected_item_id == iid:
+            reqs = self.req_cache.get(iid, {'details': {}})['details']
+            self.inspector.set_item(item, reqs)
+        
+        # Refresh display to update greying and stats
+        self.update_blueprint_stats()
+        self.filter_items()
 
     def confirm_reset(self):
         from PyQt6.QtWidgets import QMessageBox
