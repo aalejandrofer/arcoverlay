@@ -88,7 +88,11 @@ class QuestManagerWindow(BasePage):
             track_chk.stateChanged.connect(self.start_save_timer)
             
             done_btn = QPushButton("Done"); done_btn.setFixedWidth(80)
-            h_layout.addWidget(track_chk); h_layout.addWidget(done_btn)
+            
+            active_btn = QPushButton("Set Active"); active_btn.setFixedWidth(100)
+            active_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            
+            h_layout.addWidget(track_chk); h_layout.addWidget(active_btn); h_layout.addWidget(done_btn)
             layout.addLayout(h_layout)
             
             obj_widgets = []
@@ -104,8 +108,9 @@ class QuestManagerWindow(BasePage):
                 layout.addLayout(obj_layout)
                 obj_widgets.append({'text': obj_text, 'checkbox': check_box, 'label': text_label})
                 
-            self.quest_widgets[q_id] = { 'frame': frame, 'title': title, 'track_chk': track_chk, 'done_btn': done_btn, 'objs': obj_widgets, 'btn_up': btn_up, 'btn_down': btn_down }
+            self.quest_widgets[q_id] = { 'frame': frame, 'title': title, 'track_chk': track_chk, 'done_btn': done_btn, 'active_btn': active_btn, 'objs': obj_widgets, 'btn_up': btn_up, 'btn_down': btn_down }
             done_btn.clicked.connect(lambda _, qid=q_id: self.toggle_done(qid))
+            active_btn.clicked.connect(lambda _, qid=q_id: self.toggle_active(qid))
 
     def rebuild_and_refresh_ui(self, _=None):
         for qid, widgets in self.quest_widgets.items():
@@ -176,11 +181,23 @@ class QuestManagerWindow(BasePage):
                 widgets['track_chk'].setVisible(True)
             done_btn.style().polish(done_btn)
             
+            active_id = self.data_manager.get_active_quest_id()
+            is_active = (q_id == active_id)
+            
             completed_objs = prog.get('objectives_completed', [])
             for obj_widget in widgets['objs']:
                 is_obj_complete = obj_widget['text'] in completed_objs
                 if obj_widget['checkbox'].isChecked() != is_obj_complete: obj_widget['checkbox'].setChecked(is_obj_complete)
                 obj_widget['label'].setStyleSheet("color: #5C6370; text-decoration: line-through;" if is_obj_complete else "color: #E0E6ED;")
+
+            active_btn = widgets['active_btn']
+            if is_active:
+                widgets['frame'].setStyleSheet("#QuestFrame { background-color: #1A1F2B; border: 2px solid #FFD700; border-top: 4px solid #FFD700; border-radius: 5px; margin-top: 8px; }")
+                active_btn.setText("ACTIVE"); active_btn.setStyleSheet("background-color: rgba(255, 215, 0, 0.2); color: #FFD700; border: 1px solid #FFD700; font-weight: bold;")
+            else:
+                widgets['frame'].setStyleSheet("#QuestFrame { background-color: #1A1F2B; border: 1px solid #333; border-top: 3px solid #4CAF50; border-radius: 5px; margin-top: 8px; }")
+                active_btn.setText("Set Active"); active_btn.setStyleSheet("")
+            active_btn.setVisible(not is_complete)
 
         for q_id in visible_tracked_ids:
             widgets = self.quest_widgets[q_id]
@@ -199,6 +216,14 @@ class QuestManagerWindow(BasePage):
             self.quest_order[idx1], self.quest_order[idx2] = self.quest_order[idx2], self.quest_order[idx1]
             self.rebuild_and_refresh_ui(); self.start_save_timer()
 
+    def toggle_active(self, q_id):
+        current_active = self.data_manager.get_active_quest_id()
+        if current_active == q_id:
+            self.data_manager.set_active_quest_id(None)
+        else:
+            self.data_manager.set_active_quest_id(q_id)
+        self.rebuild_and_refresh_ui()
+
     def toggle_done(self, q_id):
         prog = self.data_manager.user_progress['quests'].setdefault(q_id, {})
         current_status = prog.get('quest_completed', False)
@@ -206,6 +231,8 @@ class QuestManagerWindow(BasePage):
         if prog['quest_completed']:
              prog['is_tracked'] = False
              self.quest_widgets[q_id]['track_chk'].setChecked(False)
+             if self.data_manager.get_active_quest_id() == q_id:
+                 self.data_manager.set_active_quest_id(None)
         self.start_save_timer(); self.rebuild_and_refresh_ui()
 
     def confirm_reset(self):

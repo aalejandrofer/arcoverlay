@@ -1,7 +1,9 @@
 import json
 import os
 import shutil
+from typing import Optional
 from .constants import Constants
+from .database_manager import DatabaseManager
 
 class ItemDatabase:
     """Loads and holds all item data from the /data/items/ directory."""
@@ -55,7 +57,11 @@ class DataManager:
         self.id_to_map = {m.get('id'): m for m in self.maps_data if m.get('id')}
             
         self.quest_data = self._load_json_dir(Constants.QUESTS_DIR)
-        self.user_progress = self._load_json(Constants.PROGRESS_FILE, {})
+        
+        # --- NEW: SQL Database ---
+        self.db = DatabaseManager()
+        self.user_progress = {}
+        self._load_user_progress()
         
         # --- NEW: Stash Data ---
         # Stash is saved in the user_progress dictionary under 'stash_inventory'
@@ -68,6 +74,79 @@ class DataManager:
         
         self.id_to_name_map = {i_id: item.get('name', 'Unknown') for i_id, item in self.id_to_item_map.items()}
         self._backup_progress()
+
+    def _load_user_progress(self):
+        # 1. Check if we need to migrate
+        is_migrated = self.db.get_state('is_migrated', False)
+        if not is_migrated and os.path.exists(Constants.PROGRESS_FILE):
+            self._migrate_from_json()
+        
+        # 2. Load from DB
+        self.user_progress = {
+            'stash_inventory': self.db.get_all_stash(),
+            'item_notes': self.db.get_all_notes(),
+            'tracked_items': self.db.get_all_tracked_items(),
+            'quests': self.db.get_all_quest_progress(),
+            'projects': self.db.get_all_project_progress(),
+            'active_quest_id': self.db.get_state('active_quest_id'),
+            'quest_order': self.db.get_state('quest_order', []),
+            'hideout_station_order': self.db.get_state('hideout_station_order', []),
+            'hideout_inventory': self.db.get_all_hideout_inventories()
+        }
+        
+        # Load station levels
+        levels = self.db.get_all_hideout_levels()
+        self.user_progress.update(levels)
+
+    def _migrate_from_json(self):
+        print("[INFO] Migrating progress from JSON to SQL...")
+        json_data = self._load_json(Constants.PROGRESS_FILE, {})
+        if not json_data: return
+
+        # Items
+        stash = json_data.get('stash_inventory', {})
+        for iid, qty in stash.items(): self.db.set_item_stash(iid, qty)
+        
+        notes = json_data.get('item_notes', {})
+        for iid, note in notes.items(): self.db.set_item_note(iid, note)
+        
+        tracked = json_data.get('tracked_items', {})
+        if isinstance(tracked, list): # Handle old list format
+            for iid in tracked: self.db.set_item_tracked(iid, True)
+        elif isinstance(tracked, dict):
+            for iid, meta in tracked.items():
+                self.db.set_item_tracked(iid, True)
+                self.db.set_item_tags(iid, meta.get('tags', []))
+
+        # Quests
+        quests = json_data.get('quests', {})
+        for qid, qdata in quests.items():
+            self.db.set_quest_progress(qid, qdata.get('is_tracked', False), qdata.get('quest_completed', False), qdata.get('objectives_completed', []))
+
+        # Projects
+        projects = json_data.get('projects', {})
+        for pid, pdata in projects.items():
+            self.db.set_project_progress(pid, pdata.get('completed_phase', 0), pdata.get('inventory', {}))
+
+        # Hideout
+        h_inv = json_data.get('hideout_inventory', {})
+        for sid, sinv in h_inv.items():
+            # Get level from main dict
+            lvl = json_data.get(sid, 0)
+            self.db.set_hideout_progress(sid, lvl, sinv)
+
+        # App State
+        self.db.set_state('active_quest_id', json_data.get('active_quest_id'))
+        self.db.set_state('quest_order', json_data.get('quest_order', []))
+        self.db.set_state('hideout_station_order', json_data.get('hideout_station_order', []))
+        
+        # Mark as migrated
+        self.db.set_state('is_migrated', True)
+        
+        # Backup JSON
+        try: shutil.move(Constants.PROGRESS_FILE, Constants.PROGRESS_FILE + ".migrated")
+        except: pass
+        print("[INFO] Migration complete.")
 
     def _load_json(self, filepath: str, default=None):
         if not os.path.exists(filepath): return default or {}
@@ -87,25 +166,58 @@ class DataManager:
         return data_list
 
     def _backup_progress(self):
-        if os.path.exists(Constants.PROGRESS_FILE):
-            try: shutil.copy2(Constants.PROGRESS_FILE, Constants.PROGRESS_FILE + ".bak")
+        # We can still backup the DB file
+        if os.path.exists(Constants.PROGRESS_DB):
+            try: shutil.copy2(Constants.PROGRESS_DB, Constants.PROGRESS_DB + ".bak")
             except Exception: pass
 
     def save_user_progress(self):
+        """Syncs current self.user_progress to the SQLite database."""
         try:
-            temp_file = Constants.PROGRESS_FILE + ".tmp"
-            with open(temp_file, 'w', encoding='utf-8') as f:
-                json.dump(self.user_progress, f, indent=4)
-                f.flush()
-                os.fsync(f.fileno())
-            os.replace(temp_file, Constants.PROGRESS_FILE)
-        except Exception as e: print(f"Error saving progress: {e}")
+            # Sync Items
+            stash = self.user_progress.get('stash_inventory', {})
+            # We don't want to wipe the DB and re-insert everything every time 
+            # if we can help it, but for a simple app it might be easiest 
+            # to just use the specific setters already called by the UI.
+            # However, some UI parts might modify self.user_progress directly then call save.
+            
+            # To be safe, we sync the core parts
+            for iid, qty in stash.items(): self.db.set_item_stash(iid, qty)
+            # Remove items that were deleted from stash
+            # (In a real DB manager we'd do this more efficiently)
+            
+            notes = self.user_progress.get('item_notes', {})
+            for iid, note in notes.items(): self.db.set_item_note(iid, note)
+            
+            tracked = self.user_progress.get('tracked_items', {})
+            # This is tricky because tracked_items is a dict of metadata now
+            for iid, meta in tracked.items():
+                self.db.set_item_tracked(iid, True)
+                self.db.set_item_tags(iid, meta.get('tags', []))
+
+            quests = self.user_progress.get('quests', {})
+            for qid, qdata in quests.items():
+                self.db.set_quest_progress(qid, qdata.get('is_tracked', False), qdata.get('quest_completed', False), qdata.get('objectives_completed', []))
+
+            projects = self.user_progress.get('projects', {})
+            for pid, pdata in projects.items():
+                self.db.set_project_progress(pid, pdata.get('completed_phase', 0), pdata.get('inventory', {}))
+
+            hideout_inv = self.user_progress.get('hideout_inventory', {})
+            for sid, sinv in hideout_inv.items():
+                lvl = self.user_progress.get(sid, 0)
+                self.db.set_hideout_progress(sid, lvl, sinv)
+
+            # State
+            self.db.set_state('active_quest_id', self.user_progress.get('active_quest_id'))
+            self.db.set_state('quest_order', self.user_progress.get('quest_order', []))
+            self.db.set_state('hideout_station_order', self.user_progress.get('hideout_station_order', []))
+            
+            self._backup_progress()
+        except Exception as e: print(f"Error saving progress to DB: {e}")
 
     def reload_progress(self): 
-        new_data = self._load_json(Constants.PROGRESS_FILE, {})
-        self.user_progress.clear()
-        self.user_progress.update(new_data)
-        if 'stash_inventory' not in self.user_progress: self.user_progress['stash_inventory'] = {}
+        self._load_user_progress()
         self._backup_progress()
     
     # --- STASH MANAGEMENT ---
@@ -129,6 +241,13 @@ class DataManager:
         elif item_id in self.user_progress['item_notes']: del self.user_progress['item_notes'][item_id]
         self.save_user_progress()
 
+    def get_active_quest_id(self) -> Optional[str]:
+        return self.user_progress.get('active_quest_id')
+
+    def set_active_quest_id(self, quest_id: Optional[str]):
+        self.user_progress['active_quest_id'] = quest_id
+        self.save_user_progress()
+
     def get_localized_name(self, item_identifier, lang_code='en'):
         item = None
         if isinstance(item_identifier, dict): item = item_identifier
@@ -140,6 +259,43 @@ class DataManager:
         if isinstance(name_field, dict): return name_field.get(lang_code, name_field.get('en', 'Unknown'))
         elif isinstance(name_field, str): return name_field
         return "Unknown"
+
+    # --- TRACKING ---
+    def get_tracked_items_data(self) -> dict:
+        """Returns a dict of tracked item IDs and their metadata (tags, etc)."""
+        tracked = self.user_progress.get('tracked_items', {})
+        if isinstance(tracked, list):
+            # Migration: convert old list format to new dict format
+            new_tracked = {iid: {"tags": []} for iid in tracked if isinstance(iid, str)}
+            self.user_progress['tracked_items'] = new_tracked
+            self.save_user_progress()
+            return new_tracked
+        return tracked
+
+    def is_item_tracked(self, item_id: str) -> bool:
+        tracked = self.get_tracked_items_data()
+        return item_id in tracked
+
+    def toggle_item_track(self, item_id: str):
+        tracked = self.get_tracked_items_data()
+        if item_id in tracked:
+            del tracked[item_id]
+        else:
+            tracked[item_id] = {"tags": []}
+        self.user_progress['tracked_items'] = tracked
+        self.save_user_progress()
+
+    def get_item_tags(self, item_id: str) -> list:
+        tracked = self.get_tracked_items_data()
+        return tracked.get(item_id, {}).get('tags', [])
+
+    def set_item_tags(self, item_id: str, tags: list):
+        tracked = self.get_tracked_items_data()
+        if item_id not in tracked:
+            tracked[item_id] = {"tags": []}
+        tracked[item_id]['tags'] = [t.strip() for t in tags if t.strip()]
+        self.user_progress['tracked_items'] = tracked
+        self.save_user_progress()
 
     def get_quest_map_names(self, quest_data, lang_code='en'):
         map_ids = quest_data.get('map')
@@ -227,6 +383,9 @@ class DataManager:
             pid = proj.get('id')
             pname = self.get_localized_name(proj, lang_code)
             if 'Project' in pname: pname = pname.replace('Project', '').strip()
+            # Filter inactive projects
+            if proj.get('disabled', False): continue
+            
             prog = p_prog.get(pid, {'completed_phase': 0, 'inventory': {}})
             comp_phase, inv = prog.get('completed_phase', 0), prog.get('inventory', {})
             for phase in proj.get('phases', []):
@@ -245,6 +404,28 @@ class DataManager:
                             remaining = needed - owned
                             display_str = f"{pname} (Ph{pnum}): x{remaining}"
                         results.append((display_str, req_type, is_complete, needed))
+        return results
+
+    def find_quest_requirements(self, item_name: str, lang_code='en'):
+        """Find quest requirements for an item. Returns list of (display_string, is_active, is_complete) tuples."""
+        results, target_item = [], self.get_item_by_name(item_name)
+        if not target_item or 'id' not in target_item: return []
+        tid = target_item['id']
+        active_id = self.get_active_quest_id()
+        
+        for quest in self.quest_data:
+            qid = quest.get('id')
+            qname = self.get_localized_name(quest, lang_code)
+            
+            # Check requirements
+            reqs = quest.get('requiredItemIds', [])
+            for req in reqs:
+                if req.get('itemId') == tid:
+                    needed = req.get('quantity', 0)
+                    prog = self.user_progress.get('quests', {}).get(qid, {})
+                    is_complete = prog.get('quest_completed', False)
+                    is_active = (qid == active_id)
+                    results.append((f"{qname}: x{needed}", is_active, is_complete))
         return results
 
     def get_item_by_name(self, name: str): return self.items.get(name)

@@ -14,14 +14,34 @@ def get_base_path():
 def get_writable_data_dir():
     """
     Determines where to save User Data (JSONs, downloaded images).
+    Robust cross-platform implementation.
     """
-    if getattr(sys, 'frozen', False):
-        local_app_data = os.getenv('LOCALAPPDATA')
-        base = os.path.join(local_app_data, 'ArcCompanion', 'data')
+    # Detect if we are on a problematic filesystem (WSL share from Windows)
+    is_wsl_share = sys.platform == 'win32' and (
+        os.path.abspath(".").startswith("\\\\wsl") or 
+        os.path.abspath(".").startswith("\\\\wsl.localhost")
+    )
+
+    if getattr(sys, 'frozen', False) or is_wsl_share:
+        if sys.platform == 'win32':
+            # Use LocalAppData on Windows to ensure native filesystem (no network locking issues)
+            base = os.path.join(os.getenv('LOCALAPPDATA', os.path.expanduser("~")), 'ArcOverlay', 'data')
+            if is_wsl_share and not getattr(sys, 'frozen', False):
+                print(f"[INFO] WSL Share detected. Redirecting data to native Windows path: {base}")
+        else:
+            # Linux/macOS standard: ~/.local/share/ArcOverlay
+            base = os.path.join(os.path.expanduser("~"), ".local", "share", "ArcOverlay", "data")
     else:
-        base = os.path.join(os.path.abspath("."), 'data')
+        # Standard development mode on native filesystem: use local data folder
+        base = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data')
     
-    os.makedirs(base, exist_ok=True)
+    try:
+        os.makedirs(base, exist_ok=True)
+    except Exception:
+        # Absolute fallback to home directory if project dir is not writable
+        base = os.path.join(os.path.expanduser("~"), ".arcoverlay_data")
+        os.makedirs(base, exist_ok=True)
+        
     return base
 
 class Constants:
@@ -56,43 +76,54 @@ class Constants:
     # --- File Paths (External) ---
     CONFIG_FILE = os.path.join(DATA_DIR, 'config.ini')
     PROGRESS_FILE = os.path.join(DATA_DIR, 'progress.json')
+    PROGRESS_DB = os.path.join(DATA_DIR, 'progress.db')
     TRADES_FILE = os.path.join(DATA_DIR, 'trades.json') 
     PROJECTS_FILE = os.path.join(DATA_DIR, 'projects.json') 
     MAPS_FILE = os.path.join(DATA_DIR, 'maps.json')
 
     # --- INTERNAL RESOURCES ---
-    ICON_FILE = os.path.join(get_base_path(), 'arccompanion.ico')
+    ICON_FILE = os.path.join(get_base_path(), 'arcoverlay.ico')
     
     if getattr(sys, 'frozen', False):
-        _ASSETS_DIR = os.path.join(sys._MEIPASS, 'bundled_assets')
+        _ASSETS_DIR = os.path.join(sys._MEIPASS, 'data', 'images')
     else:
-        _ASSETS_DIR = os.path.join(os.path.abspath("."), "data", "images")
+        # Core UI icons moved here to be tracked by git
+        _ASSETS_DIR = os.path.join(os.path.abspath("."), "Images", "build_icons")
     
     # Currency Icons
     _COIN_SVG = os.path.join(_ASSETS_DIR, 'coins.svg')
     _COIN_PNG = os.path.join(_ASSETS_DIR, 'coins.png')
-    COIN_ICON_PATH = _COIN_SVG if os.path.exists(_COIN_SVG) else _COIN_PNG
+    COIN_ICON_PATH = _COIN_SVG if os.path.exists(_COIN_SVG) else (_COIN_PNG if os.path.exists(_COIN_PNG) else None)
     
     # Storage Icons (New)
     _STORAGE_SVG = os.path.join(_ASSETS_DIR, 'storage.svg')
     _STORAGE_PNG = os.path.join(_ASSETS_DIR, 'storage.png')
-    STORAGE_ICON_PATH = _STORAGE_SVG if os.path.exists(_STORAGE_SVG) else _STORAGE_PNG
+    STORAGE_ICON_PATH = _STORAGE_SVG if os.path.exists(_STORAGE_SVG) else (_STORAGE_PNG if os.path.exists(_STORAGE_PNG) else None)
+
+    # Redesign Icons
+    QUEST_ICON_PATH = os.path.join(_ASSETS_DIR, 'quest_icon.png')
+    HIDEOUT_ICON_PATH = os.path.join(_ASSETS_DIR, 'hideout_icon.png')
+    PROJECT_ICON_PATH = os.path.join(_ASSETS_DIR, 'project_icon.png')
+    RECYCLE_ICON_PATH = os.path.join(_ASSETS_DIR, 'recycle_icon.png')
+    SALVAGE_ICON_PATH = os.path.join(_ASSETS_DIR, 'recycle_icon.png') # Using recycle icon as fallback/shared for now
     
-    # Banners
-    BANNER_IMAGE_PATH = os.path.join(_ASSETS_DIR, 'support_banner.png')
-    DISCORD_IMAGE_PATH = os.path.join(_ASSETS_DIR, 'discord_banner.png')
+    # Validation helper to avoid UI crashes
+    @classmethod
+    def get_icon(cls, path):
+        return path if path and os.path.exists(path) else None
+    
 
     # PyQt Stylesheet
     DARK_THEME_QSS = """
     QWidget {
-        font-family: "Segoe UI";
+        font-family: "Segoe UI", "Inter", sans-serif;
         font-size: 14px;
         color: #E0E6ED;
     }
     
     ProgressHubWindow, ItemDatabaseWindow, SettingsWindow {
-        background-color: qlineargradient(spread:pad, x1:0, y1:0, x2:0, y2:1, 
-                                          stop:0 #2B303B, stop:1 #1A1F26);
+        background-color: qlineargradient(spread:pad, x1:0, y1:0, x2:1, y2:1, 
+                                          stop:0 #1E222A, stop:1 #121418);
     }
 
     HideoutManagerWindow, QuestManagerWindow, ProjectManagerWindow, BaseManagerWindow {
@@ -104,40 +135,41 @@ class Constants:
     }
 
     QFrame#StationFrame, QFrame#QuestFrame, QFrame#ProjectFrame, QFrame#card {
-        background-color: #1A1F2B;
-        border: 1px solid #333;
-        border-radius: 5px;
+        background-color: rgba(26, 31, 43, 0.6);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        border-radius: 8px;
         margin-top: 8px;
     }
 
-    QFrame#StationFrame { border-top: 3px solid #4476ED; }
-    QFrame#QuestFrame   { border-top: 3px solid #4CAF50; }
-    QFrame#ProjectFrame { border-top: 3px solid #ED9A44; }
+    QFrame#StationFrame { border-top: 2px solid #4476ED; }
+    QFrame#QuestFrame   { border-top: 2px solid #98C379; }
+    QFrame#ProjectFrame { border-top: 2px solid #ED9A44; }
 
     QLabel[objectName="Header"] {
         font-size: 18px;
         font-weight: bold;
-        color: #E0E6ED;
+        color: #FFF;
         border: none;
         padding-bottom: 5px;
     }
 
     QLineEdit {
-        background-color: #232834;
-        border: 1px solid #333;
-        padding: 6px;
-        border-radius: 4px;
+        background-color: rgba(35, 40, 52, 0.8);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        padding: 8px;
+        border-radius: 6px;
         color: white;
     }
     QLineEdit:focus {
         border: 1px solid #4476ED;
+        background-color: rgba(35, 40, 52, 1.0);
     }
     
     QComboBox {
-        background-color: #232834;
-        border: 1px solid #333;
-        border-radius: 4px;
-        padding: 5px 10px;
+        background-color: rgba(35, 40, 52, 0.8);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 6px;
+        padding: 6px 12px;
         color: #E0E6ED;
         min-width: 120px;
     }
@@ -147,51 +179,39 @@ class Constants:
         selection-background-color: #4476ED;
         color: #E0E6ED;
         border: 1px solid #333;
+        border-radius: 4px;
     }
 
     QPushButton {
-        background-color: #3E4451;
-        color: white;
-        border: none;
-        padding: 6px 12px;
-        border-radius: 4px;
+        background-color: #2D333B;
+        color: #E0E6ED;
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        padding: 8px 16px;
+        border-radius: 6px;
+        font-weight: 600;
     }
     QPushButton:hover {
-        background-color: #4B5363;
+        background-color: #3E4451;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    QPushButton:pressed {
+        background-color: #232834;
     }
     QPushButton:disabled {
-        background-color: #2C323C;
+        background-color: #1A1F26;
         color: #5C6370;
     }
     
     QPushButton[objectName="inv_button"] {
-        background-color: #232834;
-        border: 1px solid #333;
-        padding: 4px;
+        background-color: rgba(35, 40, 52, 0.6);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        padding: 5px;
         font-weight: bold;
         border-radius: 4px;
     }
     QPushButton[objectName="inv_button"]:hover {
         background-color: #4476ED;
-        border: 1px solid #4476ED;
-    }
-
-    QPushButton[objectName="action_button_green"] {
-        background-color: rgba(76, 175, 80, 0.2); 
-        color: #4CAF50;
-        border: 1px solid #4CAF50;
-    }
-    QPushButton[objectName="action_button_green"]:hover {
-        background-color: rgba(76, 175, 80, 0.4);
-    }
-
-    QPushButton[objectName="action_button_red"] {
-        background-color: rgba(211, 47, 47, 0.2);
-        color: #ef5350;
-        border: 1px solid #ef5350;
-    }
-    QPushButton[objectName="action_button_red"]:hover {
-        background-color: rgba(211, 47, 47, 0.4);
+        color: white;
     }
 
     QScrollArea {
@@ -201,23 +221,52 @@ class Constants:
     
     QScrollBar:vertical {
         border: none;
-        background: #1A1F26;
-        width: 10px;
+        background: transparent;
+        width: 8px;
         margin: 0px;
     }
     QScrollBar::handle:vertical {
-        background: #3E4451;
-        min-height: 20px;
-        border-radius: 5px;
+        background: rgba(255, 255, 255, 0.1);
+        min-height: 30px;
+        border-radius: 4px;
     }
     QScrollBar::handle:vertical:hover {
-        background: #555;
+        background: rgba(255, 255, 255, 0.2);
     }
     QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
         height: 0px;
     }
-    QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
-        background: none;
+
+    QTabWidget::pane {
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        border-radius: 8px;
+        background-color: rgba(26, 31, 43, 0.3);
+        top: -1px;
+    }
+    QTabBar::tab {
+        background-color: transparent;
+        color: #9DA5B4;
+        padding: 12px 24px;
+        border-bottom: 2px solid transparent;
+        margin-right: 4px;
+        font-weight: 600;
+    }
+    QTabBar::tab:hover {
+        color: white;
+        background-color: rgba(255, 255, 255, 0.03);
+    }
+    QTabBar::tab:selected {
+        color: #4476ED;
+        border-bottom: 2px solid #4476ED;
+        background-color: rgba(68, 118, 237, 0.05);
+    }
+
+    QToolTip {
+        background-color: #121418;
+        color: #E0E6ED;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 4px;
+        padding: 8px;
     }
 
     QCheckBox {
@@ -227,9 +276,9 @@ class Constants:
     QCheckBox::indicator {
         width: 18px;
         height: 18px;
-        border: 1px solid #333;
-        border-radius: 3px;
-        background-color: #232834;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 4px;
+        background-color: rgba(35, 40, 52, 0.8);
     }
     QCheckBox::indicator:hover {
         border: 1px solid #4476ED;
@@ -241,85 +290,52 @@ class Constants:
     }
 
     QProgressBar {
-        border: 1px solid #333;
-        border-radius: 4px;
-        background-color: #232834;
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        border-radius: 6px;
+        background-color: rgba(35, 40, 52, 0.4);
         text-align: center;
+        height: 12px;
     }
     QProgressBar::chunk {
-        background-color: #4476ED;
-        border-radius: 3px; 
-    }
-    QProgressBar[complete="true"]::chunk {
-        background-color: #4CAF50;
-    }
-
-    QTabWidget::pane {
-        border: 1px solid #333;
-        border-radius: 4px;
-        background-color: transparent;
-    }
-    QTabBar::tab {
-        background-color: #232834;
-        color: #9DA5B4;
-        padding: 10px 20px;
-        border: 1px solid #333;
-        border-bottom: none;
-        border-top-left-radius: 4px;
-        border-top-right-radius: 4px;
-        margin-right: 2px;
-    }
-    QTabBar::tab:hover {
-        background-color: #2C323C;
-        color: white;
-    }
-    QTabBar::tab:selected {
-        background-color: #4476ED; 
-        color: white;
-        border: 1px solid #444;
-        border-bottom: 1px solid #232834;
-    }
-
-    QToolTip {
-        background-color: #1A1F2B;
-        color: #E0E6ED;
-        border: 1px solid #333;
-        padding: 8px;
-        font-size: 13px;
+        background-color: qlineargradient(spread:pad, x1:0, y1:0, x2:1, y2:0, stop:0 #4476ED, stop:1 #61AFEF);
+        border-radius: 5px; 
     }
 
     QMessageBox, QProgressDialog {
-        background-color: #2B303B;
-    }
-    QMessageBox QLabel, QProgressDialog QLabel {
+        background-color: #1E222A;
         color: #E0E6ED;
+    }
+    QMessageBox QPushButton {
+        min-width: 80px;
     }
 
     QMenu {
-        background-color: #2B303B;
-        border: 1px solid #333;
+        background-color: #1E222A;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 6px;
+        padding: 4px;
     }
     QMenu::item {
-        padding: 5px 20px 5px 20px;
-        color: #E0E6ED;
+        padding: 6px 24px;
+        border-radius: 4px;
     }
     QMenu::item:selected {
-        background-color: #3E4451;
+        background-color: #4476ED;
         color: white;
     }
     QMenu::separator {
         height: 1px;
-        background: #333;
-        margin: 5px 0px;
+        background: rgba(255, 255, 255, 0.05);
+        margin: 4px 8px;
     }
     """
 
     RARITY_COLORS = {
-        "Common": "#B0B0B0",
-        "Uncommon": "#98C379",  
-        "Rare": "#61AFEF",      
-        "Epic": "#C678DD",      
-        "Legendary": "#E5C07B"  
+        "Common": "#ABB2BF",
+        "Uncommon": "#98C379",  # Kept natural green
+        "Rare": "#4476ED",      # Deeper, premium blue
+        "Epic": "#BB86FC",      # Modern soft purple
+        "Legendary": "#FFD700"  # Bright gold
     }
     QUEST_HEADER_COLOR = "#E5C07B" 
     QUEST_OBJECTIVE_COLOR = "#E0E6ED"

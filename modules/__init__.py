@@ -1,1 +1,1 @@
-# Arc Companion Modules Package
+# Arc Overlay Modules Package

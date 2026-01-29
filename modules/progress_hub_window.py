@@ -9,73 +9,23 @@ from .quest_manager_window import QuestManagerWindow
 from .project_manager_window import ProjectManagerWindow
 from .item_database_window import ItemDatabaseWindow
 from .settings_window import SettingsWindow
-from .ui_components import ClickableBanner, set_dark_title_bar, ensure_window_within_screen
+from .ui_components import set_dark_title_bar, ensure_window_within_screen
 import random
 
 class AboutTab(QWidget):
     def __init__(self, app_version, check_update_func=None):
         super().__init__()
         layout = QVBoxLayout(self); layout.setContentsMargins(20, 20, 20, 20); layout.setSpacing(15)
-        title_lbl = QLabel("Arc Companion"); title_lbl.setStyleSheet("font-size: 28px; font-weight: bold; color: #E5C07B;"); title_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter); layout.addWidget(title_lbl)
+        title_lbl = QLabel("Arc Overlay"); title_lbl.setStyleSheet("font-size: 28px; font-weight: bold; color: #E5C07B;"); title_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter); layout.addWidget(title_lbl)
         version_lbl = QLabel(f"Version: {app_version}"); version_lbl.setStyleSheet("font-size: 16px; color: #ABB2BF;"); version_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter); layout.addWidget(version_lbl)
-        if check_update_func:
-            check_btn = QPushButton("Check for App Updates"); check_btn.setCursor(Qt.CursorShape.PointingHandCursor); check_btn.setFixedWidth(200); check_btn.setStyleSheet("QPushButton { background-color: #3E4451; color: white; border: 1px solid #555; padding: 6px; border-radius: 4px; font-weight: bold;} QPushButton:hover { background-color: #4B5363; border-color: #777; }")
-            check_btn.clicked.connect(check_update_func)
-            btn_layout = QHBoxLayout(); btn_layout.addStretch(); btn_layout.addWidget(check_btn); btn_layout.addStretch(); layout.addLayout(btn_layout)
         layout.addSpacing(10)
         def make_link(text, url, subtext=None):
             lbl = QLabel(f"<a href='{url}' style='color: #61AFEF; text-decoration: none;'>{text}</a>")
             if subtext: lbl.setText(f"{subtext} <a href='{url}' style='color: #61AFEF; text-decoration: none;'>{text}</a>")
             lbl.setOpenExternalLinks(True); lbl.setFont(QFont("Segoe UI", 14)); lbl.setAlignment(Qt.AlignmentFlag.AlignCenter); return lbl
-        layout.addWidget(make_link("www.arc-companion.xyz", "https://www.arc-companion.xyz"))
-        layout.addWidget(make_link("Open Source", "https://github.com/Joopz0r/ArcCompanion-public"))
+        layout.addWidget(make_link("Source Code", "https://github.com/aalejandrofer/arcoverlay"))
         layout.addWidget(make_link("RaidTheory/arcraiders-data", "https://github.com/RaidTheory/arcraiders-data", "Special thanks to:"))
-        layout.addSpacing(20)
-        patch_lbl = QLabel("Patch Notes"); patch_lbl.setStyleSheet("font-size: 18px; font-weight: bold; color: #E0E6ED; margin-bottom: 5px;"); layout.addWidget(patch_lbl)
-        self.patch_notes = QTextEdit(); self.patch_notes.setReadOnly(True); self.patch_notes.setStyleSheet("QTextEdit { background-color: #232834; color: #E0E6ED; border: 1px solid #3E4451; border-radius: 4px; padding: 10px; font-size: 13px; font-family: 'Segoe UI'; }")
-        self.patch_notes.setHtml(f"""
-        <b>{app_version} - New Features & Major Improvements</b><br><br>
-
-        <b>Core Systems</b><br>
-        - <b>Backup System:</b> New Backup/Restore tab in settings<br>
-        - <b>Hyperspeed OCR:</b> Faster and more accurate tooltip reading<br>
-        - <b>Live Settings:</b> Hotkeys and overlay settings update instantly<br>
-        - <b>Anchor Mode:</b> Pin Item Overlay to fixed position<br>
-        - <b>Opacity Slider:</b> Control overlay transparency<br><br>
-
-        <b>Item Overlay Enhancements</b><br>
-        - Drag-and-drop reordering for overlay sections<br>
-        - Display storage quantities in overlay<br>
-        - Added color picker for OCR color<br>
-        - Roman Numeral OCR Fix (Il -> II)<br>
-        - Smart Tooltip Cropping & Language Filtering<br><br>
-
-        <b>Quest & Hideout Management</b><br>
-        - <b>Quest Overlay:</b> Map names, search bar, and map filters<br>
-        - <b>Hideout Manager:</b> Remembers section states between sessions<br><br>
-
-        <b>Item Database</b><br>
-        - Quick filter buttons (Blueprints, Storage)<br>
-        - Blueprint progress counter and collection tracking<br>
-        - Dedicated inspector panel for item details<br>
-        - Improved filtering and multi-language search<br><br>
-
-        <b>UI/UX Improvements</b><br>
-        - Dark Theme applied to all popups<br>
-        - <b>Progress Hub:</b> New Reset buttons properly clear data<br>
-        - <b>Window:</b> Prevented off-screen sticking<br>
-        - <b>Settings:</b> Reorganized into tabbed interface<br>
-        - Dynamic Monitor Detection<br><br>
-
-        <b>Bug Fixes</b><br>
-        - Fixed unresponsive app buttons after updates<br>
-        - Fixed overlay text size setting<br>
-        - Fixed inventory sync issues<br>
-        - Fixed Quest Hub items disappearing<br>
-        - Resolved JSON parsing errors<br>
-        - Fixed future hideout/projects settings<br>
-        """)
-        layout.addWidget(self.patch_notes)
+        layout.addStretch()
 
 class ProgressHubWindow(QWidget):
     # This signal bubbles up auto-saves from children tabs to the main app
@@ -90,59 +40,13 @@ class ProgressHubWindow(QWidget):
         # Apply dark title bar
         set_dark_title_bar(self)
 
-        self.setWindowTitle("Arc Companion - Progress Hub")
+        self.setWindowTitle("Arc Overlay - Progress Hub")
         self.resize(760, 850) 
         if os.path.exists(Constants.ICON_FILE): self.setWindowIcon(QIcon(Constants.ICON_FILE))
         self.setStyleSheet(Constants.DARK_THEME_QSS)
 
         main_layout = QVBoxLayout(self)
-        # Banner Area
-        self.banner_container = QWidget()
-        banner_layout = QHBoxLayout(self.banner_container)
-        banner_layout.setSpacing(15)
-        banner_layout.setContentsMargins(5, 5, 5, 5)
-        
-        self.support_banner = ClickableBanner(Constants.BANNER_IMAGE_PATH, "https://ko-fi.com/joopz0r", "☕ Support the Dev", bg_color="#333")
-        self.discord_banner = ClickableBanner(Constants.DISCORD_IMAGE_PATH, "https://discord.gg/RzjPhXCXfH", "Join Discord", bg_color="#5865F2")
-        
-        banner_layout.addWidget(self.support_banner)
-        banner_layout.addWidget(self.discord_banner)
-        main_layout.addWidget(self.banner_container)
 
-        # Banner Toggle Button
-        self.toggle_banner_btn = QPushButton("▲")
-        self.toggle_banner_btn.setText("▼") 
-        
-        self.toggle_banner_btn.setFixedSize(100, 12) # Slimmer height, wider width
-        self.toggle_banner_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.toggle_banner_btn.setToolTip("Hide Banner")
-        self.toggle_banner_btn.setStyleSheet("""
-            QPushButton {
-                background-color: transparent;
-                color: #5C6370;
-                border: none;
-                border-top: 1px solid #3E4451;
-                border-bottom-left-radius: 4px;
-                border-bottom-right-radius: 4px;
-                font-size: 10px;
-                padding: 0px;
-                margin: 0px;
-            }
-            QPushButton:hover {
-                background-color: #2C323C;
-                color: #E5C07B;
-            }
-        """)
-        self.toggle_banner_btn.clicked.connect(self.toggle_banner)
-        
-        # Center the toggle button
-        btn_layout = QHBoxLayout()
-        btn_layout.addStretch()
-        btn_layout.addWidget(self.toggle_banner_btn)
-        btn_layout.addStretch()
-        btn_layout.setContentsMargins(0, 0, 0, 0)
-        btn_layout.setSpacing(0) # Remove spacing
-        main_layout.addLayout(btn_layout)
 
         # --- RESTORE WINDOW STATE ---
         # Geometry
@@ -165,16 +69,6 @@ class ProgressHubWindow(QWidget):
             self.resize(w, h)
 
 
-        # Banner State
-        banner_visible = self.config_manager.get_banner_visible()
-        if not banner_visible:
-            self.banner_container.hide()
-            self.toggle_banner_btn.setText("▲")
-            self.toggle_banner_btn.setToolTip("Show Banner")
-        else:
-            self.banner_container.show()
-            self.toggle_banner_btn.setText("▼")
-            self.toggle_banner_btn.setToolTip("Hide Banner")
 
         self.tabs = QTabWidget()
         main_layout.addWidget(self.tabs)
@@ -240,7 +134,6 @@ class ProgressHubWindow(QWidget):
     def closeEvent(self, event):
         # Save Window State
         self.config_manager.set_window_geometry(self.x(), self.y(), self.width(), self.height())
-        self.config_manager.set_banner_visible(self.banner_container.isVisible())
         self.config_manager.save()
 
         # Force a final save on all tabs before closing
@@ -248,15 +141,6 @@ class ProgressHubWindow(QWidget):
             if hasattr(tab, 'save_state'): tab.save_state()
         super().closeEvent(event)
 
-    def toggle_banner(self):
-        if self.banner_container.isVisible():
-            self.banner_container.hide()
-            self.toggle_banner_btn.setText("▲") # Pointing up to show/expand? Or just swapped from before.
-            self.toggle_banner_btn.setToolTip("Show Banner")
-        else:
-            self.banner_container.show()
-            self.toggle_banner_btn.setText("▼")
-            self.toggle_banner_btn.setToolTip("Hide Banner")
 
     def cleanup(self):
         if hasattr(self, 'item_db_tab'):

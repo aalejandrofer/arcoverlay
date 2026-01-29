@@ -8,4 +8,6 @@ pystray
 pyqt6
 requests
 mss
-opencv-python-headless
+opencv-python
+pyinstaller
+cx-Freeze

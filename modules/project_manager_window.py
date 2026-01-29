@@ -143,10 +143,41 @@ class ProjectManagerWindow(BasePage):
         """)
         self.main_layout.insertWidget(1, self.tabs) # Insert after header
 
+        self.chk_show_past = QCheckBox("Show Past Projects")
+        self.chk_show_past.stateChanged.connect(self.build_ui)
+        self.header.add_widget(self.chk_show_past)
+
         self.build_ui()
 
     def build_ui(self):
+        # Clear tabs
+        while self.tabs.count():
+            self.tabs.removeTab(0)
+
+        if not self.project_data:
+            placeholder = QWidget()
+            layout = QVBoxLayout(placeholder)
+            layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            
+            msg = QLabel("NO PROJECTS FOUND")
+            msg.setStyleSheet("font-size: 16pt; font-weight: bold; color: #5C6370;")
+            layout.addWidget(msg)
+            
+            info = QLabel("Please try pulling the latest database from Settings > Data Management.")
+            info.setStyleSheet("color: #ABB2BF; margin-bottom: 20px;")
+            layout.addWidget(info)
+            
+            self.tabs.addTab(placeholder, "Empty")
+            return
+
+
+
         for project in self.project_data:
+            # Filter inactive projects
+            if not self.chk_show_past.isChecked():
+                if project.get('disabled', False):
+                    continue
+
             p_id = project.get('id')
             if not p_id: continue
             
@@ -171,10 +202,31 @@ class ProjectManagerWindow(BasePage):
             content_layout.setSpacing(15)
             scroll.setWidget(content_widget)
             
-            self.tabs.addTab(tab_widget, p_name)
+            # Mark disabled projects visually
+            display_name = p_name
+            if project.get('disabled', False):
+                display_name += " (PAST)"
+            
+            self.tabs.addTab(tab_widget, display_name)
             
             # Add Project Title inside the tab as well
-            content_layout.addWidget(QLabel(p_name, objectName="Header"))
+            content_layout.addWidget(QLabel(display_name, objectName="Header"))
+            
+            # Only show "Empty" if we actually added no tabs
+        if self.tabs.count() == 0:
+            placeholder = QWidget()
+            layout = QVBoxLayout(placeholder)
+            layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            
+            msg = QLabel("NO ACTIVE PROJECTS")
+            msg.setStyleSheet("font-size: 16pt; font-weight: bold; color: #5C6370;")
+            layout.addWidget(msg)
+            
+            info = QLabel("Check 'Show Past Projects' to see old events.")
+            info.setStyleSheet("color: #ABB2BF; margin-bottom: 20px;")
+            layout.addWidget(info)
+            
+            self.tabs.addTab(placeholder, "Empty")
             
             for phase_info in sorted(project.get('phases', []), key=lambda x: x.get('phase', 0)):
                 phase_num = phase_info.get('phase', 0)

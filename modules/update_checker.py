@@ -3,24 +3,6 @@ import requests
 import json
 import os
 from .constants import Constants
-from concurrent.futures import ThreadPoolExecutor, as_completed
-
-# The base URL for downloading the raw file content
-GITHUB_RAW_URL = "https://raw.githubusercontent.com/Joopz0r/arcraiders-data/main/"
-# URL for the raw versions.json manifest, bypassing Git Tree API limits
-REMOTE_MANIFEST_URL = "https://raw.githubusercontent.com/Joopz0r/arcraiders-data/main/versions.json"
-
-# --- MODIFIED: Added maps.json to managed paths ---
-MANAGED_PATHS = [
-    'items/',
-    'hideout/',
-    'quests/',
-    'images/',
-    'projects.json',
-    'trades.json',
-    'maps.json'
-]
-# --------------------------------------------------------------------------
 
 class UpdateChecker(QObject):
     """
@@ -48,102 +30,80 @@ class UpdateChecker(QObject):
         return {}
 
     def run_check(self):
-        """The main entry point to start checking for updates."""
+        """Checks if we can reach GitHub, then offers a full refresh since versions.json is deprecated."""
         self.checking_for_updates.emit()
         
         try:
-            # Download the raw versions.json directly to bypass API rate limits
-            response = requests.get(REMOTE_MANIFEST_URL, timeout=10)
+            # Check if we can reach the repo
+            repo_api_url = "https://api.github.com/repos/RaidTheory/arcraiders-data"
+            response = requests.get(repo_api_url, timeout=10)
             response.raise_for_status()
-            remote_versions_map = response.json()
+            # Inform user that we'll perform a full sync
+            self.update_check_finished.emit([{'path': 'FULL_SYNC', 'sha': 'zip'}], "Connection established. A full data refresh is available.")
         except requests.exceptions.RequestException as e:
             self.update_check_finished.emit([], f"Error: Could not connect to GitHub. ({e})")
             return
-        except json.JSONDecodeError:
-            self.update_check_finished.emit([], "Error: Invalid version data received.")
-            return
-
-        files_to_download = []
-        
-        # The raw versions.json is a simple flat dictionary ({"path": "hash"})
-        if isinstance(remote_versions_map, dict):
-            for path, remote_sha in remote_versions_map.items():
-                # Filter by managed paths
-                if any(path.startswith(p) for p in MANAGED_PATHS):
-                    local_sha = self.local_versions.get(path)
-                    if local_sha != remote_sha:
-                        files_to_download.append({'path': path, 'sha': remote_sha})
-        
-        if not files_to_download:
-            self.update_check_finished.emit([], "You are up to date!")
-        else:
-            self.update_check_finished.emit(files_to_download, f"{len(files_to_download)} new or updated files found.")
-
-    def _download_single_file(self, file_info):
-        """Helper to download a single file. Returns (success, path, error_msg/None)."""
-        path = file_info['path']
-        request_url = GITHUB_RAW_URL + path
-        try:
-            response = requests.get(request_url, timeout=10)
-            response.raise_for_status()
-            
-            local_path = os.path.join(Constants.DATA_DIR, path)
-            dir_name = os.path.dirname(local_path)
-            if not os.path.exists(dir_name):
-                os.makedirs(dir_name, exist_ok=True)
-                
-            with open(local_path, 'wb') as f:
-                f.write(response.content)
-            
-            return True, path, None
-        except Exception as e:
-            return False, path, str(e)
 
     def download_updates(self, files_to_download):
-        """Downloads the list of files provided by the check using parallel threads."""
-        total_files = len(files_to_download)
-        
-        # Use ThreadPoolExecutor for parallel downloads
-        # Limiting max_workers to 8 to avoid overwhelming the network or system
-        with ThreadPoolExecutor(max_workers=8) as executor:
-            # Create a map of future -> file_info
-            future_to_file = {
-                executor.submit(self._download_single_file, f): f 
-                for f in files_to_download
-            }
-            
-            completed_count = 0
-            errors = []
-            
-            for future in as_completed(future_to_file):
-                completed_count += 1
-                success, path, error_msg = future.result()
-                
-                # Emit progress for each completed file
-                self.download_progress.emit(completed_count, total_files, os.path.basename(path))
-                
-                if success:
-                    # Update local version only on success
-                    # Need to find the sha for this path
-                    for item in files_to_download:
-                        if item['path'] == path:
-                            self.local_versions[path] = item['sha']
-                            break
-                else:
-                    errors.append(f"{path}: {error_msg}")
+        """Downloads the entire database as a ZIP and extracts it, replacing the old incremental logic."""
+        import zipfile
+        import io
+        import shutil
+        from pathlib import Path
 
-        if errors:
-            # If there were errors, show the first one (or a summary)
-            self.update_complete.emit(False, f"Failed to download {len(errors)} files. First error: {errors[0]}")
-        else:
-            # Save the new versions.json
-            versions_path = os.path.join(Constants.DATA_DIR, 'versions.json')
-            try:
-                with open(versions_path, 'w', encoding='utf-8') as f:
-                    json.dump(self.local_versions, f, indent=2)
-                self.update_complete.emit(True, "Update successful! Please restart the application for changes to take effect.")
-            except IOError as e:
-                self.update_complete.emit(False, f"Error saving new version file: {e}")
+        self.download_progress.emit(0, 100, "Downloading latest game data ZIP...")
+        
+        repo_url = "https://github.com/RaidTheory/arcraiders-data/archive/refs/heads/main.zip"
+        data_dir = Path(Constants.DATA_DIR)
+
+        try:
+            resp = requests.get(repo_url, timeout=60)
+            resp.raise_for_status()
+            
+            self.download_progress.emit(50, 100, "Extracting updates...")
+            
+            with zipfile.ZipFile(io.BytesIO(resp.content)) as zip_ref:
+                root_folder = zip_ref.namelist()[0].split('/')[0]
+                
+                # Managed paths mapping (ZIP folder -> Local subfolder)
+                sync_map = {
+                    "items/": "items",
+                    "projects.json": "projects.json",
+                    "quests/": "quests",
+                    "hideout/": "hideout",
+                    "trades.json": "trades.json",
+                    "maps.json": "maps.json",
+                    "bots.json": "bots.json",
+                    "images/": "images"
+                }
+                
+                updated_count = 0
+                for zip_info in zip_ref.infolist():
+                    if not zip_info.filename.startswith(root_folder + "/"):
+                        continue
+                        
+                    rel_path = zip_info.filename[len(root_folder)+1:]
+                    if not rel_path: continue
+                    
+                    target_rel_path = None
+                    for key, local_subpath in sync_map.items():
+                        if rel_path == key or rel_path.startswith(key):
+                            target_rel_path = local_subpath + rel_path[len(key)-1:] if key.endswith('/') else local_subpath
+                            break
+                    
+                    if target_rel_path:
+                        dest_path = data_dir / target_rel_path
+                        if zip_info.is_dir():
+                            dest_path.mkdir(parents=True, exist_ok=True)
+                        else:
+                            dest_path.parent.mkdir(parents=True, exist_ok=True)
+                            with zip_ref.open(zip_info) as source, open(dest_path, "wb") as target:
+                                shutil.copyfileobj(source, target)
+                            updated_count += 1
+
+            self.update_complete.emit(True, f"Successfully synced {updated_count} files from GitHub. Please restart.")
+        except Exception as e:
+            self.update_complete.emit(False, f"Update failed: {str(e)}")
 
     def download_language(self, lang_code):
         """Downloads a specific Tesseract language file."""

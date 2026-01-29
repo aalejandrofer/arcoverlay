@@ -100,11 +100,37 @@ class ItemGridCard(QFrame):
     def set_selected(self, selected):
         if self.is_selected != selected: self.is_selected = selected; self._update_style()
     def _update_style(self):
-        if self.is_bp: bg = "qlineargradient(spread:pad, x1:0, y1:0, x2:1, y2:1, stop:0 #0d1b2a, stop:1 #1b263b)"; bg_hover = "#162235"; base_border = "#415a77"
-        else: bg = "#131519"; bg_hover = "#232834"; base_border = "#2A2E39"
-        if self.is_selected: border = "2px solid #FFD700"; bg_style = bg_hover; hover_border = "#FFD700"
-        else: border = f"1px solid {base_border}"; bg_style = bg; hover_border = self.rarity_color
-        self.setStyleSheet(f"QFrame {{ background: {bg_style}; border: {border}; border-top: 3px solid {self.rarity_color}; border-radius: 6px; }} QFrame:hover {{ background: {bg_hover}; border-color: {hover_border}; }}")
+        if self.is_bp: 
+            bg = "qlineargradient(spread:pad, x1:0, y1:0, x2:1, y2:1, stop:0 rgba(13, 27, 42, 0.8), stop:1 rgba(27, 38, 59, 0.9))"
+            bg_hover = "rgba(22, 34, 53, 1.0)"
+            base_border = "rgba(65, 90, 119, 0.3)"
+        else: 
+            bg = "rgba(19, 21, 25, 0.6)"
+            bg_hover = "rgba(35, 40, 52, 0.8)"
+            base_border = "rgba(255, 255, 255, 0.05)"
+            
+        if self.is_selected: 
+            border = "2px solid #4476ED"
+            bg_style = bg_hover
+            hover_border = "#4476ED"
+        else: 
+            border = f"1px solid {base_border}"
+            bg_style = bg
+            hover_border = self.rarity_color
+            
+        self.setStyleSheet(f"""
+            QFrame {{ 
+                background: {bg_style}; 
+                border: {border}; 
+                border-top: 3px solid {self.rarity_color}; 
+                border-radius: 8px; 
+            }} 
+            QFrame:hover {{ 
+                background: {bg_hover}; 
+                border-color: {hover_border}; 
+            }}
+        """)
+
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton: self.clicked.emit(self.item)
 
@@ -113,9 +139,13 @@ class ItemInspectorPanel(QFrame):
     def __init__(self, data_manager, image_loader, lang_code):
         super().__init__()
         self.data_manager = data_manager; self.image_loader = image_loader; self.lang_code = lang_code; self.current_item = None
-        self.setFixedWidth(320); self.setStyleSheet("QFrame { background-color: #1A1F2B; border-left: 1px solid #333; }")
-        self.main_layout = QVBoxLayout(self); self.main_layout.setContentsMargins(10, 10, 10, 5); self.main_layout.setSpacing(8)
-        self.placeholder = QLabel("Select an item to view details"); self.placeholder.setStyleSheet("color: #666; font-size: 14px; font-style: italic; border: none;")
+        self.setFixedWidth(320)
+        self.setStyleSheet("QFrame { background-color: rgba(26, 31, 43, 0.4); border-left: 1px solid rgba(255, 255, 255, 0.05); }")
+        
+        self.main_layout = QVBoxLayout(self); self.main_layout.setContentsMargins(15, 20, 15, 10); self.main_layout.setSpacing(12)
+        
+        self.placeholder = QLabel("SELECT AN ITEM\\nTO VIEW DETAILS"); 
+        self.placeholder.setStyleSheet("color: rgba(255, 255, 255, 0.3); font-size: 13px; font-weight: bold; letter-spacing: 1px; border: none;")
         self.placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter); self.main_layout.addWidget(self.placeholder)
         self.content_container = QWidget(); self.content_container.setVisible(False); self.content_container.setStyleSheet("border: none;")
         self.c_layout = QVBoxLayout(self.content_container); self.c_layout.setContentsMargins(0,0,0,0)
@@ -146,7 +176,12 @@ class ItemInspectorPanel(QFrame):
         self.req_label = QLabel("REQUIRED FOR:"); self.req_label.setStyleSheet("font-weight: bold; color: #DDD; margin-top: 10px; border-bottom: 1px solid #444;"); self.scroll_layout.addWidget(self.req_label)
         self.req_container = QWidget(); self.req_layout = QVBoxLayout(self.req_container); self.req_layout.setContentsMargins(0,0,0,0); self.scroll_layout.addWidget(self.req_container)
         n_lbl = QLabel("USER NOTES:"); n_lbl.setStyleSheet("font-weight: bold; color: #DDD; margin-top: 15px; border-bottom: 1px solid #444;"); self.scroll_layout.addWidget(n_lbl)
-        self.note_edit = QTextEdit(); self.note_edit.setPlaceholderText("Write personal notes here..."); self.note_edit.setStyleSheet("background-color: #111; color: #E5C07B; border: 1px solid #444; border-radius: 4px; padding: 5px;"); self.note_edit.setFixedHeight(80); self.note_edit.textChanged.connect(self._on_note_change); self.scroll_layout.addWidget(self.note_edit); self.scroll_layout.addStretch()
+        self.note_edit = QTextEdit(); self.note_edit.setPlaceholderText("Write personal notes here..."); self.note_edit.setStyleSheet("background-color: #111; color: #E5C07B; border: 1px solid #444; border-radius: 4px; padding: 5px;"); self.note_edit.setFixedHeight(80); self.note_edit.textChanged.connect(self._on_note_change); self.scroll_layout.addWidget(self.note_edit)
+        
+        t_lbl = QLabel("CUSTOM TAGS (shared in scanner):"); t_lbl.setStyleSheet("font-weight: bold; color: #DDD; margin-top: 15px; border-bottom: 1px solid #444;"); self.scroll_layout.addWidget(t_lbl)
+        self.tags_edit = QLineEdit(); self.tags_edit.setPlaceholderText("e.g. Needed for Quest X | Crafting..."); self.tags_edit.setStyleSheet("background-color: #111; color: #FFD700; border: 1px solid #444; border-radius: 4px; padding: 5px;"); self.tags_edit.textChanged.connect(self._on_tags_change); self.scroll_layout.addWidget(self.tags_edit)
+
+        self.scroll_layout.addStretch()
         self.details_scroll.setWidget(scroll_c); self.c_layout.addWidget(self.details_scroll); self.main_layout.addWidget(self.content_container)
     def _create_adj_btn(self, text, bg_color):
         btn = QPushButton(text); btn.setFixedSize(55, 30); btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -177,11 +212,14 @@ class ItemInspectorPanel(QFrame):
             self.bp_toggle_btn.setVisible(False); self.storage_bar.update_status(current_stash, stack_size)
         self._update_track_btn_style()
         price_val = item.get('value', 0); val_lbl, icon_lbl = self.stat_labels["val"]; val_lbl.setText(f"{price_val:,}")
-        if os.path.exists(Constants.COIN_ICON_PATH):
+        if Constants.COIN_ICON_PATH and os.path.exists(Constants.COIN_ICON_PATH):
             pix = QPixmap(Constants.COIN_ICON_PATH); icon_lbl.setPixmap(pix.scaled(16, 16, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)); icon_lbl.setVisible(True)
         else: icon_lbl.setVisible(False); val_lbl.setText(f"£{price_val:,}")
         self.stat_labels["w"][0].setText(f"{item.get('weightKg', 0)}kg"); self.stat_labels["stack"][0].setText(str(stack_size)); self.stat_labels["type"][0].setText(item_type)
         self.note_edit.blockSignals(True); self.note_edit.setPlainText(self.data_manager.get_item_note(item.get('id'))); self.note_edit.blockSignals(False)
+        self.tags_edit.blockSignals(True)
+        self.tags_edit.setText(" | ".join(self.data_manager.get_item_tags(item.get('id'))))
+        self.tags_edit.blockSignals(False)
         while self.req_layout.count(): child = self.req_layout.takeAt(0); (child.widget().deleteLater() if child.widget() else None)
         if any(req_details.values()):
             self.req_label.setVisible(True); self._add_reqs("QUESTS", req_details.get('quest'), "#4CAF50"); self._add_reqs("HIDEOUT", req_details.get('hideout'), "#2196F3"); self._add_reqs("PROJECTS", req_details.get('project'), "#FF9800")
@@ -201,12 +239,11 @@ class ItemInspectorPanel(QFrame):
     def _toggle_blueprint(self):
         if not self.current_item: return
         iid = self.current_item.get('id'); current = self.data_manager.get_stash_count(iid); new_val = 1 if current == 0 else 0
-        tracked = self.data_manager.user_progress.get('tracked_items', [])
-        if new_val > 0: 
-            if iid in tracked: tracked.remove(iid)
-        else: 
-            if iid not in tracked: tracked.append(iid)
-        self.data_manager.user_progress['tracked_items'] = tracked; self.data_manager.set_stash_count(iid, new_val); self.data_manager.save_user_progress()
+        if new_val > 0:
+            if self.data_manager.is_item_tracked(iid): self.data_manager.toggle_item_track(iid)
+        else:
+            if not self.data_manager.is_item_tracked(iid): self.data_manager.toggle_item_track(iid)
+        self.data_manager.set_stash_count(iid, new_val)
         self._update_bp_style(new_val > 0); self._update_track_btn_style(); self.data_changed.emit()
     def _update_bp_style(self, collected):
         if collected: self.bp_toggle_btn.setText("COLLECTED"); self.bp_toggle_btn.setStyleSheet("QPushButton { background-color: #2E5C32; color: #4CAF50; border: 1px solid #4CAF50; font-weight: bold; font-size: 11px; border-radius: 3px; }")
@@ -214,15 +251,18 @@ class ItemInspectorPanel(QFrame):
     def _scroll_to_notes(self): self.note_edit.setFocus(); bar = self.details_scroll.verticalScrollBar(); bar.setValue(bar.maximum())
     def _on_note_change(self):
         if self.current_item: self.data_manager.set_item_note(self.current_item.get('id'), self.note_edit.toPlainText())
+    def _on_tags_change(self):
+        if self.current_item:
+            tags = [t.strip() for t in self.tags_edit.text().split('|') if t.strip()]
+            self.data_manager.set_item_tags(self.current_item.get('id'), tags)
     def _toggle_track(self):
         if not self.current_item: return
-        iid = self.current_item.get('id'); tracked = self.data_manager.user_progress.get('tracked_items', [])
-        if iid in tracked: tracked.remove(iid)
-        else: tracked.append(iid)
-        self.data_manager.user_progress['tracked_items'] = tracked; self.data_manager.save_user_progress(); self._update_track_btn_style(); self.data_changed.emit()
+        iid = self.current_item.get('id')
+        self.data_manager.toggle_item_track(iid)
+        self._update_track_btn_style(); self.data_changed.emit()
     def _update_track_btn_style(self):
         if not self.current_item: return
-        is_tracked = self.current_item.get('id') in self.data_manager.user_progress.get('tracked_items', [])
+        is_tracked = self.data_manager.is_item_tracked(self.current_item.get('id'))
         if is_tracked: self.track_btn.setText("TRACKED"); self.track_btn.setStyleSheet("QPushButton { background-color: rgba(76, 175, 80, 0.2); color: #4CAF50; border: 1px solid #4CAF50; border-radius: 4px; font-weight: bold; } QPushButton:hover { background-color: rgba(76, 175, 80, 0.4); }")
         else: self.track_btn.setText("TRACK"); self.track_btn.setStyleSheet("QPushButton { background-color: #3E4451; color: #AAA; border: 1px solid #555; border-radius: 4px; font-weight: bold; } QPushButton:hover { background-color: #4B5363; border-color: #777; color: #DDD; }")
 
@@ -314,12 +354,19 @@ class ItemDatabaseWindow(BasePage):
     # ... [Helper methods identical to previous logic] ...
     
     def _enforce_blueprint_defaults(self):
-        tracked = self.data_manager.user_progress.get('tracked_items', []); stash = self.data_manager.user_progress.get('stash_inventory', {}); changed = False
+        tracked = self.data_manager.get_tracked_items_data()
+        stash = self.data_manager.user_progress.get('stash_inventory', {})
+        changed = False
         for item in self.unique_items:
+            # Blueprint check
             if (item.get('type') == "Blueprint") or ("Blueprint" in item.get('name', '')):
                 iid = item.get('id')
-                if stash.get(iid, 0) == 0 and iid not in tracked: tracked.append(iid); changed = True
-        if changed: self.data_manager.user_progress['tracked_items'] = tracked; self.data_manager.save_user_progress()
+                if iid and stash.get(iid, 0) == 0 and iid not in tracked:
+                    tracked[iid] = {"tags": []}
+                    changed = True
+        if changed:
+            self.data_manager.user_progress['tracked_items'] = tracked
+            self.data_manager.save_user_progress()
 
     def _build_requirements_cache(self):
         self.req_cache = {}

@@ -8,6 +8,7 @@ from PyQt6.QtGui import (
     QDesktopServices, QPixmap, QGuiApplication
 )
 import os
+import sys
 import ctypes
 from PyQt6.QtCore import QObject, QEvent
 
@@ -61,6 +62,7 @@ def set_dark_title_bar(window: QWidget):
     Applies the Windows DWM immersive dark mode attribute to a window's title bar.
     Safe to call on non-Windows systems (will just do nothing).
     """
+    if sys.platform != 'win32': return
     try:
         # DWMWA_USE_IMMERSIVE_DARK_MODE = 20
         hwnd = int(window.winId())
@@ -298,6 +300,32 @@ class HotkeyButton(QPushButton):
         self.setText("Press any key... (Esc to cancel)")
         self.setStyleSheet(self.recording_style)
 
+    def mousePressEvent(self, event):
+        if not self.isChecked():
+            super().mousePressEvent(event); return
+        
+        btn = event.button()
+        btn_str = ""
+        
+        if btn == Qt.MouseButton.MiddleButton:
+            btn_str = "mouse:3"
+        elif btn == Qt.MouseButton.XButton1:
+            btn_str = "mouse:4"
+        elif btn == Qt.MouseButton.XButton2:
+            btn_str = "mouse:5"
+            
+        if btn_str:
+            self.current_key_string = btn_str
+            self.setText(btn_str)
+            self.key_set.emit(btn_str)
+            self._finish()
+            return
+            
+        # If it's left click, it might be the click that started the recording,
+        # but since we are already checked/recording, we just ignore it or allow it?
+        # Usually, left click on the button while recording should probably cancel or be ignored.
+        super().mousePressEvent(event)
+
     def keyPressEvent(self, event):
         if not self.isChecked():
             super().keyPressEvent(event); return
@@ -314,7 +342,12 @@ class HotkeyButton(QPushButton):
         if modifiers & Qt.KeyboardModifier.ControlModifier: parts.append("ctrl")
         if modifiers & Qt.KeyboardModifier.AltModifier:     parts.append("alt")
         if modifiers & Qt.KeyboardModifier.ShiftModifier:   parts.append("shift")
+        
+        # Support for function keys and other special keys
         key_text = QKeySequence(key).toString().lower()
+        if not key_text and key >= Qt.Key.Key_F1 and key <= Qt.Key.Key_F12:
+            key_text = f"f{key - Qt.Key.Key_F1 + 1}"
+            
         parts.append(key_text)
         
         final_string = "+".join(parts)
@@ -367,7 +400,7 @@ class ClickableBanner(QLabel):
         else:
             self.setText(fallback_text)
             self.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            self.setStyleSheet(f"QLabel {{ background-color: {bg_color}; color: white; font-weight: bold; font-size: 16px; border-radius: 5px; border: 1px solid #3E4451; }} QLabel:hover {{ border: 1px solid #ffffff; background-color: {bg_color}dd; }}")
+            self.setStyleSheet(f"QLabel {{ background-color: {bg_color}; color: white; font-weight: bold; font-size: 16px; border-radius: 5px; border: 1px solid #3E4451; }} QLabel:hover {{ border: 1px solid #ffffff; background-color: rgba(51, 51, 51, 0.8); }}")
 
     def resizeEvent(self, event):
         if self.original_pixmap: self.update_pixmap()

@@ -7,15 +7,17 @@ class ConfigManager:
     DEFAULT_HOTKEY_PRICE = "ctrl+f"
     DEFAULT_HOTKEY_QUEST = "ctrl+e"
     DEFAULT_HOTKEY_HUB = "ctrl+h"
-    
+
     # OCR Defaults
     DEFAULT_OCR_COLOR = "249, 238, 223"
     DEFAULT_FULL_SCREEN = False
     DEFAULT_DEBUG_SAVE = False
-    
+    DEFAULT_MOUSE_OCR_ENABLED = False
+    DEFAULT_MOUSE_BUTTONS = "3,4,5"
+
     # General Defaults
     DEFAULT_LANG = "eng"
-    
+
     # Item Overlay Defaults
     DEFAULT_ITEM_FONT = 12
     DEFAULT_ITEM_DURATION = 3.0
@@ -25,20 +27,21 @@ class ConfigManager:
     DEFAULT_ITEM_OFFSET_Y = 0
     DEFAULT_ANCHOR_MODE = "Mouse"
     DEFAULT_ITEM_OPACITY = 98
-    DEFAULT_SECTION_ORDER = "price,storage,trader,notes,crafting,hideout,project,recycle,salvage"
-    
+    DEFAULT_SECTION_ORDER = "price,storage,trader,notes,crafting,hideout,project,recycle,salvage,recommendation"
+
     # Quest Overlay Defaults
     DEFAULT_QUEST_FONT = 12
     DEFAULT_QUEST_WIDTH = 350
     DEFAULT_QUEST_OPACITY = 95
     DEFAULT_QUEST_DURATION = 5.0
-    
+
     # Window Defaults
     DEFAULT_WIN_W = 760
     DEFAULT_WIN_H = 850
     DEFAULT_WIN_X = -1
     DEFAULT_WIN_Y = -1
-    DEFAULT_BANNER_VISIBLE = True
+
+    DEFAULT_RECOMMENDATION_FORMAT = "original"  # Options: "original", "uppercase", "title", "lowercase"
 
     def __init__(self):
         self.path = Constants.CONFIG_FILE
@@ -86,12 +89,18 @@ class ConfigManager:
     # --- OCR ---
     def get_ocr_color(self): return self.get_str('OCR', 'target_color', self.DEFAULT_OCR_COLOR)
     def set_ocr_color(self, val): self.set('OCR', 'target_color', val)
-    
+
     def get_full_screen_scan(self): return self.get_bool('OCR', 'full_screen_scan', self.DEFAULT_FULL_SCREEN)
     def set_full_screen_scan(self, val): self.set('OCR', 'full_screen_scan', val)
-    
+
     def get_save_debug_images(self): return self.get_bool('OCR', 'save_debug_images', self.DEFAULT_DEBUG_SAVE)
     def set_save_debug_images(self, val): self.set('OCR', 'save_debug_images', val)
+
+    def get_mouse_ocr_enabled(self): return self.get_bool('OCR', 'mouse_ocr_enabled', self.DEFAULT_MOUSE_OCR_ENABLED)
+    def set_mouse_ocr_enabled(self, val): self.set('OCR', 'mouse_ocr_enabled', val)
+
+    def get_mouse_buttons(self): return self.get_str('OCR', 'mouse_buttons', self.DEFAULT_MOUSE_BUTTONS)
+    def set_mouse_buttons(self, val): self.set('OCR', 'mouse_buttons', val)
 
     # --- GENERAL ---
     def get_language(self): return self.get_str('General', 'language', self.DEFAULT_LANG)
@@ -108,8 +117,8 @@ class ConfigManager:
     def get_item_anchor_mode(self): return self.get_str('ItemOverlay', 'anchor_mode', self.DEFAULT_ANCHOR_MODE)
     def get_item_opacity(self): return self.get_int('ItemOverlay', 'opacity', self.DEFAULT_ITEM_OPACITY)
     def get_overlay_section_order(self): return self.get_str('ItemOverlay', 'section_order', self.DEFAULT_SECTION_ORDER)
-    
-    def set_item_overlay_settings(self, font_size, duration, show_hideout, show_project, 
+
+    def set_item_overlay_settings(self, font_size, duration, show_hideout, show_project,
                                   offset_x, offset_y, anchor_mode, opacity, order_str, section_states):
         self.set('ItemOverlay', 'font_size', font_size)
         self.set('ItemOverlay', 'duration_seconds', duration)
@@ -127,7 +136,7 @@ class ConfigManager:
     def get_quest_width(self): return self.get_int('QuestOverlay', 'width', self.DEFAULT_QUEST_WIDTH)
     def get_quest_opacity(self): return self.get_int('QuestOverlay', 'opacity', self.DEFAULT_QUEST_OPACITY)
     def get_quest_duration(self): return self.get_float('QuestOverlay', 'duration_seconds', self.DEFAULT_QUEST_DURATION)
-    
+
     def set_quest_overlay_settings(self, font_size, width, opacity, duration):
         self.set('QuestOverlay', 'font_size', font_size)
         self.set('QuestOverlay', 'width', width)
@@ -142,10 +151,11 @@ class ConfigManager:
             self.get_int('Window', 'width', self.DEFAULT_WIN_W),
             self.get_int('Window', 'height', self.DEFAULT_WIN_H)
         )
-    
+
     def set_window_geometry(self, x, y, w, h):
         self.set('Window', 'x', x); self.set('Window', 'y', y)
         self.set('Window', 'width', w); self.set('Window', 'height', h)
 
-    def get_banner_visible(self): return self.get_bool('Window', 'banner_visible', self.DEFAULT_BANNER_VISIBLE)
-    def set_banner_visible(self, val): self.set('Window', 'banner_visible', val)
+
+    def get_recommendation_format(self): return self.get_str('ItemOverlay', 'recommendation_format', self.DEFAULT_RECOMMENDATION_FORMAT)
+    def set_recommendation_format(self, val): self.set('ItemOverlay', 'recommendation_format', val)
