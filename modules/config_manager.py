@@ -27,7 +27,7 @@ class ConfigManager:
     DEFAULT_ITEM_OFFSET_Y = 0
     DEFAULT_ANCHOR_MODE = "Mouse"
     DEFAULT_ITEM_OPACITY = 98
-    DEFAULT_SECTION_ORDER = "price,storage,trader,notes,crafting,hideout,project,recycle,salvage,recommendation"
+    DEFAULT_SECTION_ORDER = "price,storage,trader,notes,crafting,hideout,project,recycle,salvage"
 
     # Quest Overlay Defaults
     DEFAULT_QUEST_FONT = 12
@@ -41,7 +41,7 @@ class ConfigManager:
     DEFAULT_WIN_X = -1
     DEFAULT_WIN_Y = -1
 
-    DEFAULT_RECOMMENDATION_FORMAT = "original"  # Options: "original", "uppercase", "title", "lowercase"
+
 
     def __init__(self):
         self.path = Constants.CONFIG_FILE
@@ -155,7 +155,3 @@ class ConfigManager:
     def set_window_geometry(self, x, y, w, h):
         self.set('Window', 'x', x); self.set('Window', 'y', y)
         self.set('Window', 'width', w); self.set('Window', 'height', h)
-
-
-    def get_recommendation_format(self): return self.get_str('ItemOverlay', 'recommendation_format', self.DEFAULT_RECOMMENDATION_FORMAT)
-    def set_recommendation_format(self, val): self.set('ItemOverlay', 'recommendation_format', val)

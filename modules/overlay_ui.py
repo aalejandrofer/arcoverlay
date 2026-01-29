@@ -33,6 +33,9 @@ class OverlayRenderer:
         project_reqs = data_context.get('project_reqs', [])
         quest_reqs = data_context.get('quest_reqs', [])
         stash_count = data_context.get('stash_count', 0)
+        user_note = data_context.get('user_note', "")
+        trade_info = data_context.get('trade_info', [])
+        crafting_info = data_context.get('crafting_info', [])
         is_tracked = data_context.get('is_tracked', False)
         toggle_track_callback = data_context.get('toggle_track_callback', None)
         
@@ -53,12 +56,16 @@ class OverlayRenderer:
                 img_lbl = QLabel()
                 pix = QPixmap(img_path).scaled(56, 56, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
                 img_lbl.setPixmap(pix)
-                img_lbl.setStyleSheet("border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; background: rgba(0,0,0,0.3); padding: 2px;")
+                # Fixed size to prevent expansion and removed backdrop/border
+                img_lbl.setFixedSize(60, 60)
+                img_lbl.setStyleSheet("background: transparent; padding: 0px; border: none;")
                 info_row.addWidget(img_lbl)
 
         # Name & Subtitle
         name_vbox = QVBoxLayout()
         name_vbox.setSpacing(0)
+        # Fix: Align name/metadata vertical center relative to image
+        name_vbox.setAlignment(Qt.AlignmentFlag.AlignVCenter)
         
         display_name = data_manager.get_localized_name(item_data, lang_code)
         name_lbl = QLabel(display_name.upper())
@@ -71,34 +78,32 @@ class OverlayRenderer:
         name_lbl.setWordWrap(True)
         name_vbox.addWidget(name_lbl)
         
-        # Metadata Layout (Rarity | Stash ... Price)
+        # Metadata Layout (Rarity | Stash | Price)
         meta_row = QHBoxLayout()
-        meta_row.setSpacing(8)
+        meta_row.setSpacing(6)
 
         meta_str = f"{rarity.upper()}"
-        if stash_count > 0: meta_str += f"  |  STASH: {stash_count}"
+        show_storage = user_settings.getboolean('ItemOverlay', 'show_storage_info', fallback=True)
+        if stash_count > 0 and show_storage: meta_str += f"  |  STASH: {stash_count}"
+        
         meta_lbl = QLabel(meta_str)
         meta_lbl.setStyleSheet(f"color: rgba(255, 255, 255, 0.4); font-size: 8pt; font-weight: bold; letter-spacing: 1px;")
         meta_row.addWidget(meta_lbl)
         
-        meta_row.addStretch()
-
-        # FIXED PRICE DISPLAY (Right aligned)
+        # INLINE PRICE DISPLAY
         val = item_data.get('value', 0)
         if val > 0:
-            price_cnt = QWidget()
-            p_lay = QHBoxLayout(price_cnt); p_lay.setContentsMargins(0,0,0,0); p_lay.setSpacing(4)
+            # Separator
+            sep = QLabel("|")
+            sep.setStyleSheet("color: rgba(255, 255, 255, 0.4); font-size: 8pt; font-weight: bold;")
+            meta_row.addWidget(sep)
             
-            p_icon = QLabel()
-            if Constants.COIN_ICON_PATH and os.path.exists(Constants.COIN_ICON_PATH):
-                 p_icon.setPixmap(QPixmap(Constants.COIN_ICON_PATH).scaled(14, 14, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
-            
-            p_txt = QLabel(f"{int(val):,}")
-            p_txt.setStyleSheet(f"color: #E5C07B; font-size: 10pt; font-weight: bold; letter-spacing: 1px;")
-            
-            p_lay.addWidget(p_icon)
-            p_lay.addWidget(p_txt)
-            meta_row.addWidget(price_cnt)
+            # Price Value (Yellow, No Icon)
+            p_lbl = QLabel(f"{int(val):,}")
+            p_lbl.setStyleSheet("color: #E5C07B; font-size: 8pt; font-weight: bold; letter-spacing: 1px;")
+            meta_row.addWidget(p_lbl)
+        
+        meta_row.addStretch()
 
         name_vbox.addLayout(meta_row)
         info_row.addLayout(name_vbox, 1)
@@ -123,7 +128,7 @@ class OverlayRenderer:
         OverlayRenderer._add_separator(container_layout)
 
         # 3. Sections
-        section_order = user_settings.get('ItemOverlay', 'section_order', fallback="price,notes,crafting,hideout,project,recycle,salvage,recommendation").split(',')
+        section_order = user_settings.get('ItemOverlay', 'section_order', fallback="price,storage,trader,crafting,hideout,project,recycle,salvage").split(',')
         has_previous_section = True 
 
         # Config mapping for visibility
@@ -135,9 +140,11 @@ class OverlayRenderer:
             'hideout': 'show_hideout_reqs',
             'project': 'show_project_reqs',
             'recycle': 'show_recycles_into',
-            'salvage': 'show_salvages_into',
-            'recommendation': 'show_recommendation'
+            'salvage': 'show_salvages_into'
         }
+
+        show_completed_hideout = user_settings.getboolean('ItemOverlay', 'show_completed_hideout_reqs', fallback=False)
+        show_completed_project = user_settings.getboolean('ItemOverlay', 'show_completed_project_reqs', fallback=False)
 
         for section_id in section_order:
             section_added = False
@@ -150,21 +157,45 @@ class OverlayRenderer:
             if section_id == "price":
                 # Removed (Moved to header)
                 pass
-            
+
+            elif section_id == "storage":
+                # Storage is already handled in the header based on 'show_storage_info'
+                # If we want a separate section, we could add it here.
+                pass
+
             elif section_id == "notes":
-                item_tags = data_manager.get_item_tags(item_data.get('id', ''))
-                if item_tags:
-                    tags_str = ", ".join(item_tags)
-                    OverlayRenderer._add_glass_section(container_layout, None, tags_str, "#61AFEF", font_size-1, is_italic=True)
+                if user_note:
+                    OverlayRenderer._add_glass_section(container_layout, None, user_note, "#61AFEF", font_size-1, is_italic=True)
+                    section_added = True
+
+            elif section_id == "trader":
+                # Mock or real trade info
+                if trade_info:
+                    if isinstance(trade_info, str):
+                        OverlayRenderer._add_glass_section(container_layout, Constants.TRADER_ICON_PATH, trade_info, "#E5C07B", font_size-1)
+                        section_added = True
+                    elif isinstance(trade_info, list):
+                        OverlayRenderer._add_requirement_section(container_layout, "TRADER OFFERS", Constants.TRADER_ICON_PATH, trade_info, font_size)
+                        section_added = True
+
+            elif section_id == "crafting":
+                if crafting_info:
+                    OverlayRenderer._add_requirement_section(container_layout, "CRAFTING", Constants.CRAFT_ICON_PATH, crafting_info, font_size)
                     section_added = True
             
-            elif section_id == "hideout" and hideout_reqs:
-                OverlayRenderer._add_requirement_section(container_layout, "HIDEOUT REQUIREMENTS", Constants.HIDEOUT_ICON_PATH, hideout_reqs, font_size)
-                section_added = True
+            elif section_id == "hideout":
+                # Filter completed
+                filtered_h = [r for r in hideout_reqs if not r[2] or show_completed_hideout]
+                if filtered_h:
+                    OverlayRenderer._add_requirement_section(container_layout, "HIDEOUT REQUIREMENTS", Constants.HIDEOUT_ICON_PATH, filtered_h, font_size)
+                    section_added = True
                 
-            elif section_id == "project" and project_reqs:
-                OverlayRenderer._add_requirement_section(container_layout, "PROJECT REQUESTS", Constants.PROJECT_ICON_PATH, project_reqs, font_size)
-                section_added = True
+            elif section_id == "project":
+                # Filter completed
+                filtered_p = [r for r in project_reqs if not r[2] or show_completed_project]
+                if filtered_p:
+                    OverlayRenderer._add_requirement_section(container_layout, "PROJECT REQUESTS", Constants.PROJECT_ICON_PATH, filtered_p, font_size)
+                    section_added = True
             
             elif section_id == "recycle" and item_data.get('recyclesInto'):
                 recycles = item_data['recyclesInto']
@@ -205,12 +236,7 @@ class OverlayRenderer:
                 OverlayRenderer._add_requirement_section(container_layout, "QUEST REQUIREMENTS", Constants.QUEST_ICON_PATH, quest_reqs, font_size, is_quest=True)
                 section_added = True
 
-            elif section_id == "recommendation":
-                rec = item_data.get('recommendation', '').upper()
-                if rec:
-                    color = "#E06C75" if 'SELL' in rec else ("#98C379" if 'KEEP' in rec else "#E5C07B")
-                    OverlayRenderer._add_glass_section(container_layout, None, f"DECISION: {rec}", color, font_size, bold_title=True)
-                    section_added = True
+
                     
             if section_added:
                 OverlayRenderer._add_separator(container_layout)
@@ -275,7 +301,7 @@ class OverlayRenderer:
     @staticmethod
     def _add_glass_section(parent_layout, icon_path, title, title_color, font_size, lines=None, custom_widgets=None, is_italic=False, bold_title=False):
         frame = QFrame()
-        frame.setStyleSheet("background: transparent; border: none; margin-top: 2px;")
+        frame.setStyleSheet("background: transparent; border: none; margin: 0px;")
         layout = QVBoxLayout(frame)
         layout.setContentsMargins(4, 4, 4, 4)
         layout.setSpacing(2)
@@ -329,15 +355,18 @@ class OverlayRenderer:
             if is_quest:
                 txt, active, done = req[0], req[1], req[2]
                 color = "#5C6370" if done else ("#FFD700" if active else "#ABB2BF")
-                prefix = "V " if done else ("- " if active else "[ ] ")
+                prefix = "- " if done else ("- " if active else "- ") # Unified prefix style
             else:
                 txt, rtype, done = req[0], req[1], req[2]
                 color = "#5C6370" if done else ("#98C379" if rtype == 'next' else "#D19A66")
-                prefix = "X " if done else "[ ] "
+                prefix = "- " # Use hyphen for everything
                 
             lbl = QLabel(f"{prefix}{txt}")
-            lbl.setStyleSheet(f"color: {color}; font-size: {font_size}pt; margin-left: 24px;")
-            if done: lbl.setStyleSheet(lbl.styleSheet() + "text-decoration: line-through;")
+            style = f"color: {color}; font-size: {font_size}pt; margin-left: 24px;"
+            if done: 
+                style += " text-decoration: line-through;"
+            
+            lbl.setStyleSheet(style)
             layout.addWidget(lbl)
             
         parent_layout.addWidget(frame)
@@ -424,7 +453,30 @@ class BaseOverlay(QWidget):
         self.pos_anim.start()
         self.duration_timer.start(int(self.target_duration))
 
-    def check_mouse_distance(self):
+    def set_content(self, data_context, user_settings, data_manager, lang_code="en"):
+        # Clear existing content
+        while self.container_layout.count():
+            item = self.container_layout.takeAt(0)
+            if item.widget(): item.widget().deleteLater()
+            elif item.layout(): 
+                # Recursive clear not implemented here for brevity as Populate creates flat-ish structure
+                # But we should be safe just deleting widgets if Layouts are parented to widgets (Frames)
+                # OverlayRenderer puts everything in Frames or Layouts.
+                pass
+        
+        OverlayRenderer.populate(self.container_layout, data_context, user_settings, data_manager, lang_code)
+        
+        # Force bottom packing
+        self.container_layout.addStretch(1)
+        
+        # Force Resize
+        QTimer.singleShot(0, self.adjust_size_to_content)
+
+    def adjust_size_to_content(self):
+        self.container.adjustSize()
+        self.adjustSize()
+        self.resize(self.container.sizeHint())
+
         mouse_pos = QCursor.pos()
         rect = self.frameGeometry()
 
@@ -532,6 +584,9 @@ class ItemOverlay(BaseOverlay):
             'project_reqs': self.project_reqs,
             'quest_reqs': self.quest_reqs,
             'stash_count': self.stash_count,
+            'user_note': self.user_note,
+            'trade_info': self.trade_info,
+            'crafting_info': getattr(self, 'crafting_info', []), # Fallback if not provided
             'is_tracked': self.data_manager.is_item_tracked(self.item_data.get('id')),
             'toggle_track_callback': self.toggle_track
         }

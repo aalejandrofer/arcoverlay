@@ -114,9 +114,7 @@ class DataManager:
         if isinstance(tracked, list): # Handle old list format
             for iid in tracked: self.db.set_item_tracked(iid, True)
         elif isinstance(tracked, dict):
-            for iid, meta in tracked.items():
                 self.db.set_item_tracked(iid, True)
-                self.db.set_item_tags(iid, meta.get('tags', []))
 
         # Quests
         quests = json_data.get('quests', {})
@@ -193,7 +191,6 @@ class DataManager:
             # This is tricky because tracked_items is a dict of metadata now
             for iid, meta in tracked.items():
                 self.db.set_item_tracked(iid, True)
-                self.db.set_item_tags(iid, meta.get('tags', []))
 
             quests = self.user_progress.get('quests', {})
             for qid, qdata in quests.items():
@@ -260,13 +257,12 @@ class DataManager:
         elif isinstance(name_field, str): return name_field
         return "Unknown"
 
-    # --- TRACKING ---
     def get_tracked_items_data(self) -> dict:
         """Returns a dict of tracked item IDs and their metadata (tags, etc)."""
         tracked = self.user_progress.get('tracked_items', {})
         if isinstance(tracked, list):
             # Migration: convert old list format to new dict format
-            new_tracked = {iid: {"tags": []} for iid in tracked if isinstance(iid, str)}
+            new_tracked = {iid: {} for iid in tracked if isinstance(iid, str)}
             self.user_progress['tracked_items'] = new_tracked
             self.save_user_progress()
             return new_tracked
@@ -281,21 +277,11 @@ class DataManager:
         if item_id in tracked:
             del tracked[item_id]
         else:
-            tracked[item_id] = {"tags": []}
+            tracked[item_id] = {}
         self.user_progress['tracked_items'] = tracked
         self.save_user_progress()
 
-    def get_item_tags(self, item_id: str) -> list:
-        tracked = self.get_tracked_items_data()
-        return tracked.get(item_id, {}).get('tags', [])
 
-    def set_item_tags(self, item_id: str, tags: list):
-        tracked = self.get_tracked_items_data()
-        if item_id not in tracked:
-            tracked[item_id] = {"tags": []}
-        tracked[item_id]['tags'] = [t.strip() for t in tags if t.strip()]
-        self.user_progress['tracked_items'] = tracked
-        self.save_user_progress()
 
     def get_quest_map_names(self, quest_data, lang_code='en'):
         map_ids = quest_data.get('map')
@@ -336,7 +322,26 @@ class DataManager:
 
     def find_trades_for_item(self, item_name: str):
         item = self.get_item_by_name(item_name)
-        return self.item_to_trades_map.get(item['id'], []) if item and 'id' in item else []
+        if not item or 'id' not in item: return []
+        
+        raw_trades = self.item_to_trades_map.get(item['id'], [])
+        results = []
+        for trade in raw_trades:
+             trader = trade.get('trader', 'Unknown')
+             cost_data = trade.get('cost', {})
+             cost_id = cost_data.get('itemId')
+             cost_qty = cost_data.get('quantity', 0)
+             
+             cost_name = self.get_localized_name(cost_id)
+             
+             limit = trade.get('dailyLimit')
+             limit_str = f" (Limit {limit})" if limit is not None else ""
+             
+             # Format: Trader: CostItem xQty (Limit)
+             display_str = f"{trader}: {cost_name} x{cost_qty}{limit_str}"
+             results.append((display_str, 'trade', False))
+             
+        return results
     
     def find_hideout_requirements(self, item_name: str, lang_code='en'):
         """

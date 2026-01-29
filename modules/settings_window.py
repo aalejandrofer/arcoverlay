@@ -2,10 +2,11 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QSlider, QPushButton, QComboBox, QStackedWidget, QFrame,
     QGraphicsDropShadowEffect, QMessageBox, QTabWidget, QListWidget, QListWidgetItem,
-    QAbstractItemView, QSpinBox, QAbstractSpinBox, QApplication, QFileDialog, QLineEdit, QCheckBox
+    QAbstractItemView, QSpinBox, QAbstractSpinBox, QApplication, QFileDialog, QLineEdit, QCheckBox,
+    QGraphicsOpacityEffect
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QTimer
-from PyQt6.QtGui import QColor, QFont, QCursor
+from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QUrl
+from PyQt6.QtGui import QColor, QFont, QCursor, QDesktopServices
 import os
 import shutil
 import zipfile
@@ -33,17 +34,18 @@ class SettingsWindow(BasePage):
         'hideout': ('Hideout Reqs', 'show_hideout_reqs'),
         'project': ('Project Reqs', 'show_project_reqs'),
         'recycle': ('Recycles Into', 'show_recycles_into'),
-        'salvage': ('Salvages Into', 'show_salvages_into'),
-        'recommendation': ('Recommendation', 'show_recommendation')
+        'salvage': ('Salvages Into', 'show_salvages_into')
     }
-    DEFAULT_ORDER = ['storage', 'trader', 'notes', 'crafting', 'hideout', 'project', 'recycle', 'salvage', 'recommendation']
+    DEFAULT_ORDER = ['storage', 'trader', 'notes', 'crafting', 'hideout', 'project', 'recycle', 'salvage']
     DEFAULT_OCR_COLOR = (249, 238, 223)
 
-    def __init__(self, config_manager, data_manager=None, on_save_callback=None):
+    def __init__(self, config_manager, data_manager=None, on_save_callback=None, app_version="1.0.0", update_callback=None):
         super().__init__("Application Settings")
         self.cfg = config_manager
         self.data_manager = data_manager
         self.on_save_callback = on_save_callback
+        self.app_version = app_version
+        self.update_callback = update_callback
 
         self.start_hotkey_price = ""
         self.start_hotkey_quest = ""
@@ -63,16 +65,18 @@ class SettingsWindow(BasePage):
         # Tabs are now compact
         self.tabs.setStyleSheet("""
             QTabWidget::pane { border: 1px solid #333; border-radius: 4px; background: transparent; }
-            QTabBar::tab { padding: 4px 10px; min-width: 50px; font-size: 13px; }
+            QTabBar::tab { padding: 6px 16px; min-width: 120px; font-size: 13px; margin-right: 2px; }
+            QTabBar::tab:selected { background: #3E4451; color: white; border-radius: 4px; }
+            QTabBar::tab:!selected { background: transparent; color: #BBB; border-radius: 4px; }
         """)
 
         self.content_layout.addWidget(self.tabs)
 
         self.tabs.addTab(self.setup_general_tab(), "General")
-        self.tabs.addTab(self.setup_data_tab(), "Data Management")
         self.tabs.addTab(self.setup_item_overlay_tab(), "Item Overlay")
         self.tabs.addTab(self.setup_quest_overlay_tab(), "Quest Overlay")
         self.tabs.addTab(self.setup_updates_tab(), "Updates")
+        self.tabs.addTab(self.setup_about_tab(), "About")
 
         self.footer_layout.addStretch()
 
@@ -217,7 +221,7 @@ class SettingsWindow(BasePage):
         row_color.addWidget(self.color_preview)
 
         row_color.addStretch()
-        btn_reset_color = QPushButton("Default"); btn_reset_color.setCursor(Qt.CursorShape.PointingHandCursor); btn_reset_color.setFixedSize(60, 26); btn_reset_color.setStyleSheet("font-size: 11px;")
+        btn_reset_color = QPushButton("Default"); btn_reset_color.setCursor(Qt.CursorShape.PointingHandCursor); btn_reset_color.setFixedSize(80, 26); btn_reset_color.setStyleSheet("font-size: 11px;")
         btn_reset_color.clicked.connect(self._reset_ocr_color)
         row_color.addWidget(btn_reset_color)
         l_scan.addLayout(row_color)
@@ -235,66 +239,7 @@ class SettingsWindow(BasePage):
         layout.addWidget(card_scan)
         return page
 
-    # --- DATA MANAGEMENT TAB ---
-    def setup_data_tab(self):
-        page = QWidget()
-        layout = QVBoxLayout(page)
-        layout.setContentsMargins(10, 10, 10, 10)
-        layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
-        layout.addWidget(QLabel("Data & Backup", objectName="Header"))
-
-        card = SettingsCard()
-        l_card = QVBoxLayout(card)
-        l_card.setContentsMargins(15, 15, 15, 15)
-        l_card.setSpacing(12)
-
-        info_label = QLabel("Back up your settings and progress data to a zip file.\nYou can restore it easily using the 'Restore Backup' button.")
-        info_label.setWordWrap(True)
-        info_label.setStyleSheet("color: #ABB2BF; font-size: 13px; border: none; background: transparent;")
-        l_card.addWidget(info_label)
-
-        l_card.addSpacing(10)
-
-        btn_layout = QHBoxLayout()
-
-        btn_backup = QPushButton("Create Backup")
-        btn_backup.setFixedSize(160, 36)
-        btn_backup.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_backup.setStyleSheet("""
-            QPushButton {
-                background-color: #3E4451;
-                color: white;
-                border: 1px solid #555;
-                border-radius: 4px;
-                font-weight: bold;
-                font-size: 13px;
-            }
-            QPushButton:hover {
-                background-color: #4B5363;
-                border-color: #777;
-            }
-        """)
-        btn_backup.clicked.connect(self._backup_data)
-
-        btn_restore = QPushButton("Restore Backup")
-        btn_restore.setFixedSize(160, 36)
-        btn_restore.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_restore.setStyleSheet("""
-            QPushButton {
-                background-color: #3E4451;
-                color: #E5C07B;
-                border: 1px solid #E5C07B;
-                border-radius: 4px;
-                font-weight: bold;
-                font-size: 13px;
-            }
-            QPushButton:hover {
-                background-color: #4B5363;
-                border-color: #F0D080;
-            }
-        """)
-        btn_restore.clicked.connect(self._restore_data)
 
         btn_layout.addWidget(btn_backup)
         btn_layout.addSpacing(15)
@@ -388,39 +333,63 @@ class SettingsWindow(BasePage):
                     self.data_restored.emit()
 
                     QMessageBox.information(self, "Restore Successful", "Data restored and reloaded successfully.")
-
         except Exception as e:
             QMessageBox.warning(self, "Restore Failed", f"An error occurred while restoring backup:\n{e}")
 
-    # --- UPDATES TAB ---
+    # --- DATA & UPDATES TAB --- (Consolidated)
     def setup_updates_tab(self):
         page = QWidget(); layout = QVBoxLayout(page); layout.setContentsMargins(10, 10, 10, 10); layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        
+        # 1. Update Management
         layout.addWidget(QLabel("Update Management", objectName="Header"))
         card_upd = SettingsCard(); l_upd = QVBoxLayout(card_upd); l_upd.setContentsMargins(15, 15, 15, 15); l_upd.setSpacing(12)
-        row_data = QHBoxLayout(); data_lbl_layout = QVBoxLayout(); data_lbl_layout.setSpacing(2); data_lbl_layout.addWidget(QLabel("Game Data & Information:", styleSheet="color: #ABB2BF; font-weight: bold; border: none; background: transparent; font-size: 14px;")); self.update_status_label = QLabel("Ready"); self.update_status_label.setStyleSheet("font-size: 12px; color: #E0E6ED; border: none; background: transparent; font-style: italic;"); data_lbl_layout.addWidget(self.update_status_label); row_data.addLayout(data_lbl_layout); row_data.addStretch(); data_check_btn = QPushButton("Sync Game Data"); data_check_btn.setFixedWidth(180); data_check_btn.setFixedHeight(30); data_check_btn.setObjectName("action_button_green"); data_check_btn.setCursor(Qt.CursorShape.PointingHandCursor); data_check_btn.setStyleSheet("QPushButton { font-size: 12px; }"); data_check_btn.clicked.connect(self.request_data_update.emit); row_data.addWidget(data_check_btn); l_upd.addLayout(row_data)
+        row_data = QHBoxLayout(); data_lbl_layout = QVBoxLayout(); data_lbl_layout.setSpacing(2); data_lbl_layout.addWidget(QLabel("Game Data & Information:", styleSheet="color: #ABB2BF; font-weight: bold; border: none; background: transparent; font-size: 14px;"))
+        
+        self.update_status_label = QLabel("Ready")
+        self.update_status_label.setStyleSheet("font-size: 12px; color: #E0E6ED; border: none; background: transparent; font-style: italic;")
+        data_lbl_layout.addWidget(self.update_status_label)
+        
+        # Last Updated Label
+        self.last_updated_lbl = QLabel("")
+        self.last_updated_lbl.setStyleSheet("font-size: 11px; color: #777; border: none; background: transparent; margin-top: 2px;")
+        self._refresh_last_updated_text()
+        data_lbl_layout.addWidget(self.last_updated_lbl)
+
+        row_data.addLayout(data_lbl_layout); row_data.addStretch(); data_check_btn = QPushButton("Sync Game Data"); data_check_btn.setFixedWidth(180); data_check_btn.setFixedHeight(30); data_check_btn.setObjectName("action_button_green"); data_check_btn.setCursor(Qt.CursorShape.PointingHandCursor); data_check_btn.setStyleSheet("QPushButton { font-size: 12px; }"); data_check_btn.clicked.connect(self.request_data_update.emit); row_data.addWidget(data_check_btn); l_upd.addLayout(row_data)
         
         # Attribution
-        attr_layout = QVBoxLayout()
-        attr_layout.setSpacing(2)
-        attr_title = QLabel("Data provided by:")
-        attr_title.setStyleSheet("color: #ABB2BF; font-size: 11px; margin-top: 10px; border: none; background: transparent;")
-        attr_layout.addWidget(attr_title)
-
-        github_link = QLabel("• RaidTheory/arcraiders-data (GitHub)")
-        github_link.setStyleSheet("color: #61AFEF; font-size: 11px; border: none; background: transparent; padding-left: 5px;")
-        github_link.setCursor(Qt.CursorShape.PointingHandCursor)
-        github_link.mousePressEvent = lambda e: QDesktopServices.openUrl(QUrl("https://github.com/RaidTheory/arcraiders-data"))
-        attr_layout.addWidget(github_link)
-
-        web_link = QLabel("• ArcTracker.io")
-        web_link.setStyleSheet("color: #61AFEF; font-size: 11px; border: none; background: transparent; padding-left: 5px;")
-        web_link.setCursor(Qt.CursorShape.PointingHandCursor)
-        web_link.mousePressEvent = lambda e: QDesktopServices.openUrl(QUrl("https://arctracker.io"))
-        attr_layout.addWidget(web_link)
-
+        attr_layout = QVBoxLayout(); attr_layout.setSpacing(2)
+        attr_title = QLabel("Data provided by:"); attr_title.setStyleSheet("color: #ABB2BF; font-size: 11px; margin-top: 10px; border: none; background: transparent;"); attr_layout.addWidget(attr_title)
+        github_link = QLabel("• RaidTheory/arcraiders-data (GitHub)"); github_link.setStyleSheet("color: #61AFEF; font-size: 11px; border: none; background: transparent; padding-left: 5px;"); github_link.setCursor(Qt.CursorShape.PointingHandCursor); github_link.mousePressEvent = lambda e: QDesktopServices.openUrl(QUrl("https://github.com/RaidTheory/arcraiders-data")); attr_layout.addWidget(github_link)
+        web_link = QLabel("• ArcTracker.io"); web_link.setStyleSheet("color: #61AFEF; font-size: 11px; border: none; background: transparent; padding-left: 5px;"); web_link.setCursor(Qt.CursorShape.PointingHandCursor); web_link.mousePressEvent = lambda e: QDesktopServices.openUrl(QUrl("https://arctracker.io")); attr_layout.addWidget(web_link)
         l_upd.addLayout(attr_layout)
-        
         layout.addWidget(card_upd)
+        
+        layout.addSpacing(20)
+
+        # 2. Data & Backup (Moved from Data Management)
+        layout.addWidget(QLabel("Data & Backup", objectName="Header"))
+        card_data = SettingsCard(); l_data = QVBoxLayout(card_data); l_data.setContentsMargins(15, 15, 15, 15); l_data.setSpacing(12)
+
+        info_label = QLabel("Back up your settings and progress data to a zip file.\nYou can restore it easily using the 'Restore Backup' button.")
+        info_label.setWordWrap(True); info_label.setStyleSheet("color: #ABB2BF; font-size: 13px; border: none; background: transparent;")
+        l_data.addWidget(info_label)
+        l_data.addSpacing(10)
+
+        btn_layout = QHBoxLayout()
+        btn_backup = QPushButton("Create Backup"); btn_backup.setFixedSize(160, 36); btn_backup.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_backup.setStyleSheet("QPushButton { background-color: #3E4451; color: white; border: 1px solid #555; border-radius: 4px; font-weight: bold; font-size: 13px; } QPushButton:hover { background-color: #4B5363; border-color: #777; }")
+        btn_backup.clicked.connect(self._backup_data)
+
+        btn_restore = QPushButton("Restore Backup"); btn_restore.setFixedSize(160, 36); btn_restore.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_restore.setStyleSheet("QPushButton { background-color: #3E4451; color: #E5C07B; border: 1px solid #E5C07B; border-radius: 4px; font-weight: bold; font-size: 13px; } QPushButton:hover { background-color: #4B5363; border-color: #F0D080; }")
+        btn_restore.clicked.connect(self._restore_data)
+
+        btn_layout.addWidget(btn_backup); btn_layout.addSpacing(10); btn_layout.addWidget(btn_restore); btn_layout.addStretch()
+        l_data.addLayout(btn_layout)
+        layout.addWidget(card_data)
+
+        layout.addStretch()
         return page
 
     # --- ITEM OVERLAY TAB ---
@@ -439,14 +408,14 @@ class SettingsWindow(BasePage):
         l_app = QVBoxLayout(card_app)
         l_app.setContentsMargins(10, 10, 10, 10)
 
-        self.item_font_size = self._create_slider(l_app, "Font Size:", 8, 24, 12, "pt", lambda: self.update_preview())
-        self.item_duration = self._create_slider(l_app, "Duration:", 1, 10, 3, "s", float_scale=True)
-        self.item_opacity = self._create_slider(l_app, "Opacity:", 20, 100, 98, "%")
+        self.item_font_size = self._create_slider(l_app, "Font Size:", 8, 24, 12, suffix="pt", callback=self.update_preview)
+        self.item_duration = self._create_slider(l_app, "Duration:", 1, 10, 3, suffix="s", callback=self.update_preview, float_scale=True)
+        self.item_opacity = self._create_slider(l_app, "Opacity:", 20, 100, 98, suffix="%", callback=self.update_preview)
 
         # Offsets
         l_app.addSpacing(5)
-        self.slider_offset_x = self._create_slider(l_app, "Offset X:", -1000, 1000, 0, "px", step_scale=50)
-        self.slider_offset_y = self._create_slider(l_app, "Offset Y:", -1000, 1000, 0, "px", step_scale=50)
+        self.slider_offset_x = self._create_slider(l_app, "Offset X:", -1000, 1000, 0, suffix="px", callback=self.update_preview, step_scale=50)
+        self.slider_offset_y = self._create_slider(l_app, "Offset Y:", -1000, 1000, 0, suffix="px", callback=self.update_preview, step_scale=50)
 
         # Anchor (Position)
         from PyQt6.QtWidgets import QComboBox
@@ -470,26 +439,23 @@ class SettingsWindow(BasePage):
         l_mod = QVBoxLayout(card_mod)
         l_mod.setContentsMargins(10, 10, 10, 10)
 
-        self.chk_future_hideout = ModernToggle("Show All Future Hideout Requirements")
-        self.chk_future_project = ModernToggle("Show All Future Project Requirements")
+        self.chk_future_hideout = ModernToggle("Show All Future Hideout Requirements (orange)")
+        self.chk_future_project = ModernToggle("Show All Future Project Requirements (orange)")
+        self.chk_completed_hideout = ModernToggle("Show Completed Hideout Requirements")
+        self.chk_completed_project = ModernToggle("Show Completed Project Requirements")
+
+        # Connect to live preview
+        self.chk_future_hideout.clicked.connect(self.update_preview)
+        self.chk_future_project.clicked.connect(self.update_preview)
+        self.chk_completed_hideout.clicked.connect(self.update_preview)
+        self.chk_completed_project.clicked.connect(self.update_preview)
 
         l_mod.addWidget(self.chk_future_hideout)
         l_mod.addWidget(self.chk_future_project)
+        l_mod.addWidget(self.chk_completed_hideout)
+        l_mod.addWidget(self.chk_completed_project)
 
-        # Recommendation Format
-        rec_format_layout = QHBoxLayout()
-        rec_format_label = QLabel("Recommendation Format:")
-        rec_format_label.setStyleSheet("color: #E0E6ED; font-size: 13px; min-width: 150px; border:none; background:transparent;")
-        rec_format_layout.addWidget(rec_format_label)
 
-        self.cmb_recommendation_format = QComboBox()
-        self.cmb_recommendation_format.addItems(["Original", "Uppercase", "Title Case", "Lowercase"])
-        self.cmb_recommendation_format.setStyleSheet("QComboBox { background: #2C313C; color: #E0E6ED; border: 1px solid #3E4451; padding: 5px; border-radius: 4px; }")
-        self.cmb_recommendation_format.currentTextChanged.connect(self.update_preview)
-        rec_format_layout.addWidget(self.cmb_recommendation_format)
-        rec_format_layout.addStretch()
-
-        l_mod.addLayout(rec_format_layout)
         left_col.addWidget(card_mod)
 
         lbl_list = QLabel("Order & Visibility (Drag to reorder)")
@@ -551,14 +517,195 @@ class SettingsWindow(BasePage):
         self.p_layout.addStretch()
 
         right_col.addWidget(self.preview_frame)
+        right_col.addStretch(1)
         splitter.addLayout(right_col, stretch=2)
 
         layout.addLayout(splitter)
         return page
 
     # --- QUEST OVERLAY TAB ---
+    # --- QUEST OVERLAY TAB ---
+    # --- QUEST OVERLAY TAB ---
     def setup_quest_overlay_tab(self):
-        page = QWidget(); layout = QVBoxLayout(page); layout.setContentsMargins(10, 10, 10, 10); layout.setAlignment(Qt.AlignmentFlag.AlignTop); card = SettingsCard(); l = QVBoxLayout(card); l.setSpacing(10); l.setContentsMargins(10, 10, 10, 10); self.quest_font_size = self._create_slider(l, "Font Size:", 8, 24, 12, "pt"); self.quest_width = self._create_slider(l, "Width:", 200, 600, 350, "px"); self.quest_opacity = self._create_slider(l, "Opacity:", 30, 100, 95, "%"); self.quest_duration = self._create_slider(l, "Duration:", 1, 20, 5, "s", float_scale=True); layout.addWidget(card); return page
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+
+        splitter = QHBoxLayout()
+        splitter.setSpacing(15)
+        
+        # Left Column (Settings)
+        left_col = QVBoxLayout()
+        left_col.setAlignment(Qt.AlignmentFlag.AlignTop)
+
+        card = SettingsCard()
+        l = QVBoxLayout(card)
+        l.setSpacing(10)
+        l.setContentsMargins(10, 10, 10, 10)
+        l.addWidget(QLabel("Appearance", styleSheet="color: #E0E6ED; font-weight: bold; font-size: 14px;"))
+        
+        self.quest_font_size = self._create_slider(l, "Font Size:", 8, 24, 12, "pt", callback=self.update_quest_preview)
+        self.quest_width = self._create_slider(l, "Width:", 200, 600, 350, "px", callback=self.update_quest_preview)
+        self.quest_opacity = self._create_slider(l, "Opacity:", 30, 100, 95, "%", callback=self.update_quest_preview)
+        # Duration not really needed for static preview, but kept for consistency if logic uses it
+        self.quest_duration = self._create_slider(l, "Duration:", 1, 20, 5, "s", float_scale=True) 
+        
+        left_col.addWidget(card)
+        left_col.addStretch()
+        splitter.addLayout(left_col, stretch=3)
+
+        # Right Column (Live Preview)
+        right_col = QVBoxLayout()
+        right_col.setAlignment(Qt.AlignmentFlag.AlignTop)
+        right_col.addWidget(QLabel("Live Preview", alignment=Qt.AlignmentFlag.AlignCenter, styleSheet="border:none; background:transparent; font-weight:bold; color: #ABB2BF;"))
+        
+        self.quest_preview_frame = QFrame()
+        # Initial width, though it will change with slider
+        self.quest_preview_frame.setFixedWidth(350) 
+        
+        # Match Item Overlay Glassmorphism
+        self.quest_preview_frame.setStyleSheet("""
+            QFrame {
+                background-color: qlineargradient(spread:pad, x1:0, y1:0, x2:1, y2:1, 
+                                                  stop:0 rgba(35, 39, 47, 240), 
+                                                  stop:1 rgba(22, 26, 33, 250));
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                border-top: 3px solid #E5C07B; /* Gold/Yellow for Quests */
+                border-radius: 8px;
+            }
+            QLabel { color: #E0E6ED; background: transparent; border: none; }
+        """)
+
+        # Shadow
+        shadow = QGraphicsDropShadowEffect()
+        shadow.setBlurRadius(25)
+        shadow.setXOffset(0)
+        shadow.setYOffset(6)
+        shadow.setColor(QColor(0, 0, 0, 180))
+        self.quest_preview_frame.setGraphicsEffect(shadow)
+
+        self.quest_p_layout = QVBoxLayout(self.quest_preview_frame)
+        self.quest_p_layout.setContentsMargins(12, 10, 12, 10)
+        self.quest_p_layout.setSpacing(4)
+        self.quest_p_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        
+        right_col.addWidget(self.quest_preview_frame)
+        right_col.addStretch()
+        splitter.addLayout(right_col, stretch=2)
+
+        layout.addLayout(splitter)
+        
+        # Initialize preview
+        QTimer.singleShot(100, self.update_quest_preview)
+        
+        return page
+
+    def update_quest_preview(self):
+        if not hasattr(self, 'quest_p_layout'): return
+        
+        # Clear
+        while self.quest_p_layout.count():
+            child = self.quest_p_layout.takeAt(0)
+            if child.widget(): child.widget().deleteLater()
+            
+        # Get settings
+        font_size = self.quest_font_size.value()
+        width = self.quest_width.value()
+        opacity = self.quest_opacity.value() / 100.0
+        
+        # Update frame width
+        self.quest_preview_frame.setFixedWidth(width)
+        
+        # Update Opacity (on the effect)
+        # Note: We already have a Direct Shadow effect, so we probably shouldn't override it with OpacityEffect.
+        # Instead, let's just set the window opacity if it were real, but for a widget preview, 
+        # combining effects is tricky in Qt. 
+        # Simpler approach for preview: Adjust background alpha color or just accept shadow implies opacity.
+        # But user wants "opacity" slider to visually work.
+        # Changing the alpha channel of the stylesheet background is best.
+        
+        alpha = int(255 * opacity)
+        self.quest_preview_frame.setStyleSheet(f"""
+            QFrame {{
+                background-color: qlineargradient(spread:pad, x1:0, y1:0, x2:1, y2:1, 
+                                                  stop:0 rgba(35, 39, 47, {alpha}), 
+                                                  stop:1 rgba(22, 26, 33, {alpha}));
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                border-top: 3px solid #E5C07B;
+                border-radius: 8px;
+            }}
+            QLabel {{ color: #E0E6ED; background: transparent; border: none; }}
+        """)
+
+        # Title
+        title = QLabel("Active Quest")
+        title.setStyleSheet(f"color: #E5C07B; font-weight: bold; font-size: {font_size + 2}px; margin-bottom: 2px;")
+        self.quest_p_layout.addWidget(title)
+        
+        # Objectives
+        objectives = [
+            "Find Satellite Part (0/1)",
+            "Eliminate Strix at Mall (2/5)"
+        ]
+        
+        for obj in objectives:
+            lbl = QLabel(f"- {obj}")
+            lbl.setStyleSheet(f"color: #E0E6ED; font-size: {font_size}px;")
+            lbl.setWordWrap(True)
+            self.quest_p_layout.addWidget(lbl)
+            
+        self.quest_p_layout.addStretch()
+
+    # --- ABOUT TAB ---
+    def setup_about_tab(self):
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(15)
+        layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+
+        # Title
+        title_lbl = QLabel("Arc Overlay")
+        title_lbl.setStyleSheet("font-size: 28px; font-weight: bold; color: #E5C07B;")
+        title_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(title_lbl)
+
+        # Version
+        version_lbl = QLabel(f"Version: {self.app_version}")
+        version_lbl.setStyleSheet("font-size: 16px; color: #ABB2BF;")
+        version_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(version_lbl)
+
+        layout.addSpacing(20)
+
+        # Links Helper
+        def make_section_label(text):
+            lbl = QLabel(text)
+            lbl.setStyleSheet("color: #E0E6ED; font-weight: bold; font-size: 14px; margin-top: 10px;")
+            lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            return lbl
+
+        def make_link(text, url, subtext=None):
+            lbl = QLabel(f"<a href='{url}' style='color: #61AFEF; text-decoration: none;'>{text}</a>")
+            if subtext: lbl.setText(f"{subtext} <a href='{url}' style='color: #61AFEF; text-decoration: none;'>{text}</a>")
+            lbl.setOpenExternalLinks(True); lbl.setFont(QFont("Segoe UI", 14)); lbl.setAlignment(Qt.AlignmentFlag.AlignCenter); return lbl
+
+        layout.addWidget(make_link("Source Code: aalejandrofer/arcoverlay", "https://github.com/aalejandrofer/arcoverlay"))
+
+        layout.addSpacing(20)
+        
+        # Attribution
+        layout.addWidget(make_section_label("Special Thanks / Data Sources"))
+        
+        attr_layout = QVBoxLayout()
+        attr_layout.setSpacing(5)
+        attr_layout.addWidget(QLabel("• RaidTheory/arcraiders-data (Game Data)", alignment=Qt.AlignmentFlag.AlignCenter, styleSheet="color: #9DA5B4; font-size: 13px;"))
+        attr_layout.addWidget(QLabel("• ArcTracker.io)", alignment=Qt.AlignmentFlag.AlignCenter, styleSheet="color: #9DA5B4; font-size: 13px;"))
+        layout.addLayout(attr_layout)
+
+        layout.addStretch()
+        return page
 
     # --- HELPERS ---
     def _create_slider(self, layout, label, min_v, max_v, default, suffix, callback=None, float_scale=False, step_scale=1):
@@ -587,7 +734,9 @@ class SettingsWindow(BasePage):
             else: d = v
             val_lbl.setText(f"{d:.1f}{suffix}" if float_scale else f"{d}{suffix}")
 
-        if callback: callback()
+        if callback:
+            slider.valueChanged.connect(callback)
+            callback()
         slider.valueChanged.connect(update_lbl)
 
         row.addWidget(slider)
@@ -620,95 +769,94 @@ class SettingsWindow(BasePage):
         pass
 
     def update_preview(self):
-        # SAFETY CHECK
-        if not hasattr(self, 'item_font_size'): return
+        # 0. Safety Check
+        if not hasattr(self, 'p_layout') or self.p_layout is None:
+            return
 
-        # Clear existing layout
+        # 1. Clear current preview
         while self.p_layout.count():
-            item = self.p_layout.itemAt(0)
-            if item.widget(): item.widget().setParent(None)
-            else: self.p_layout.removeItem(item)
+            child = self.p_layout.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+            elif child.layout():
+                def clear_sub(lay):
+                    while lay.count():
+                        c = lay.takeAt(0)
+                        if c.widget(): c.widget().deleteLater()
+                        elif c.layout(): clear_sub(c.layout())
+                clear_sub(child.layout())
 
-        # Create Dummy Context for Preview
-        # We simulate a "Vita Spray" or similar item
+        # 2. Mock Data
         dummy_data = {
             'item_data': {
-                'id': 'vita_spray', # Placeholder ID
-                'name': {'en': 'Vita Spray'}, 
+                'id': 'vita_spray',
+                'name': {'en': 'Vita Spray'},
                 'rarity': 'Epic',
                 'value': 14500,
-                'imageFilename': 'vita_spray.png', # Assuming this image exists or falls back
-                'recommendation': 'keep',
-                'recyclesInto': {'circuit_board': 1} # Mock ID
+                'imageFilename': 'vita_spray.png'
             },
-            'hideout_reqs': [['Med Bay (Lvl 2): x3', 'next', False]],
-            'project_reqs': [['Radio Tower (Ph2): x1', 'future', False]],
-            'quest_reqs': [],
+            'hideout_reqs': [['Med Bay (Lvl 2): x3', 'next', False], ['Med Bay (Lvl 3): x5', 'future', False], ['Water Collector (Lvl 1): x2', 'next', True]],
+            'project_reqs': [['Radio Tower (Ph2): x1', 'future', False], ['Gym (Ph1): x1', 'future', True]],
+            'quest_reqs': [['The First Step: x5', True, False]],
             'stash_count': 4,
+            'user_note': 'quest item, keep',
+            'trade_info': [('Celeste: Seeds x6 (Limit 10)', 'trade', False)],
+            'crafting_info': [['Circuit Board: x1', 'next', False]],
             'is_tracked': False,
             'toggle_track_callback': None
         }
 
-        # Mock Data Manager for Name Lookups
         class MockDataManager:
             def __init__(self):
-                self.id_to_item_map = {}
+                self.id_to_item_map = {
+                    'circuit_board': {'name': {'en': 'Circuit Board'}, 'imageFilename': 'circuit_board.png'},
+                    'scrap_metal': {'name': {'en': 'Scrap Metal'}, 'imageFilename': 'scrap_metal.png'}
+                }
             def get_localized_name(self, item, lang='en'):
                 if isinstance(item, dict): return item.get('name', {}).get('en', 'Unknown')
                 if item == 'circuit_board': return "Circuit Board"
+                if item == 'scrap_metal': return "Scrap Metal"
                 return "Unknown Item"
-            def get_item_tags(self, iid):
-                return ["quest item", "keep"]
+            def get_item_tags(self, iid): return []
             def is_item_tracked(self, iid): return False
 
-        # Use the renderer
-        # Note: We pass self.cfg (user_settings) but we might want to override some values 
-        # (like font size) if we want the preview to scale differently? 
-        # For strict parity, we use the actual settings.
-        
-        # However, to ensure it updates LIVE as the user drags sliders, we might need to 
-        # temporarily patch the settings object or ensure self.cfg reflects the SLIDER values 
-        # before saving. 
-        # The sliders update self.cfg values on change events? 
-        # No, usually they call `update_preview` then `save_settings` on release.
-        # Let's check how sliders are connected. 
-        # They connect to `update_preview`.
-        # We need to construct a temporary settings-like object or update self.cfg temporarily.
-        
-        # Let's create a proxy settings object that reads from the CURRENT slide values
+        dummy_data['item_data']['recyclesInto'] = {'circuit_board': 1}
+        dummy_data['item_data']['salvagesInto'] = {'scrap_metal': 2}
+
+        # 3. Proxy Settings
         class ProxySettings:
             def __init__(self, parent): self.p = parent
             def getint(self, section, key, fallback=0):
                 if section == 'ItemOverlay':
                     if key == 'font_size': return self.p.item_font_size.value()
-                    # if key == 'opacity': return self.p.item_opacity.value() # Opacity doesn't affect layout content much, mostly window
+                    if key == 'opacity': return self.p.item_opacity.value()
                 return self.p.cfg.getint(section, key, fallback)
             def get(self, section, key, fallback=""):
                 if section == 'ItemOverlay':
                     if key == 'section_order':
-                         # Build order from list
                          order = []
                          for i in range(self.p.overlay_order_list.count()):
                              item = self.p.overlay_order_list.item(i)
-                             if item.checkState() == Qt.CheckState.Checked:
-                                 order.append(item.data(Qt.ItemDataRole.UserRole))
+                             order.append(item.data(Qt.ItemDataRole.UserRole))
                          return ",".join(order)
-                    if key == 'anchor_mode': return "Mouse" # Force mouse visual for preview?? Or just irrelevant.
+                    if key == 'anchor_mode': return self.p.cmb_anchor.currentText()
                 return self.p.cfg.get(section, key, fallback)
             def getfloat(self, s, k, f=0.0): return self.p.cfg.getfloat(s,k,f)
             def getboolean(self, section, key, fallback=True):
-                # Check UI state for specific flags if needed
                 if key == 'show_all_future_reqs': return self.p.chk_future_hideout.isChecked()
                 if key == 'show_all_future_project_reqs': return self.p.chk_future_project.isChecked()
-                # For per-section visibility (e.g. show_notes), the presence in 'section_order' (filtered above) implies visibility.
-                # So we return True to allow the renderer to proceed if the section is in the order list.
+                if section == 'ItemOverlay':
+                    # Fix: Map config key -> section ID
+                    for sec_id, (name, cfg_key) in self.p.SECTIONS.items():
+                        if cfg_key == key:
+                            for i in range(self.p.overlay_order_list.count()):
+                                item = self.p.overlay_order_list.item(i)
+                                if item.data(Qt.ItemDataRole.UserRole) == sec_id:
+                                    return item.checkState() == Qt.CheckState.Checked
                 return True
 
         proxy_cfg = ProxySettings(self)
-        
         OverlayRenderer.populate(self.p_layout, dummy_data, proxy_cfg, MockDataManager(), "en")
-        
-        self.p_layout.addStretch()
 
     def save_state(self): self.save_settings()
     def reset_state(self): pass
@@ -738,20 +886,13 @@ class SettingsWindow(BasePage):
         self.slider_offset_y.setValue(self.cfg.get_item_offset_y() // 50)
         self.chk_future_hideout.setChecked(self.cfg.get_show_future_hideout())
         self.chk_future_project.setChecked(self.cfg.get_show_future_project())
+        self.chk_completed_hideout.setChecked(self.cfg.get_bool('ItemOverlay', 'show_completed_hideout_reqs', False))
+        self.chk_completed_project.setChecked(self.cfg.get_bool('ItemOverlay', 'show_completed_project_reqs', False))
 
         self.chk_ultrawide.setChecked(self.cfg.get_full_screen_scan())
         self.chk_debug_save.setChecked(self.cfg.get_save_debug_images())
 
-        # Recommendation format
-        if hasattr(self, 'cmb_recommendation_format'):
-            format_val = self.cfg.get_recommendation_format()
-            format_map = {'original': 'Original', 'uppercase': 'Uppercase', 'title': 'Title Case', 'lowercase': 'Lowercase'}
-            format_display = format_map.get(format_val, 'Original')
-            idx = self.cmb_recommendation_format.findText(format_display)
-            if idx >= 0:
-                self.cmb_recommendation_format.setCurrentIndex(idx)
-            else:
-                self.cmb_recommendation_format.setCurrentIndex(0)
+
 
         is_fresh_config = not self.cfg.parser.has_section('ItemOverlay')
         saved_order = [x.strip() for x in self.cfg.get_overlay_section_order().split(',') if x.strip() in self.SECTIONS]
@@ -777,6 +918,8 @@ class SettingsWindow(BasePage):
         for key in order_list: self.cfg.set('ItemOverlay', self.SECTIONS[key][1], True)
         self.cfg.set('ItemOverlay', 'show_all_future_reqs', True)
         self.cfg.set('ItemOverlay', 'show_all_future_project_reqs', True)
+        self.cfg.set('ItemOverlay', 'show_completed_hideout_reqs', False)
+        self.cfg.set('ItemOverlay', 'show_completed_project_reqs', False)
         self.cfg.set('ItemOverlay', 'offset_x', 0)
         self.cfg.set('ItemOverlay', 'offset_y', 0)
         self.cfg.set('ItemOverlay', 'anchor_mode', "Mouse")
@@ -828,6 +971,8 @@ class SettingsWindow(BasePage):
 
         self.chk_future_hideout.setChecked(self.cfg.DEFAULT_SHOW_FUTURE_HIDEOUT)
         self.chk_future_project.setChecked(self.cfg.DEFAULT_SHOW_FUTURE_PROJECT)
+        self.chk_completed_hideout.setChecked(False)
+        self.chk_completed_project.setChecked(False)
 
         # Reset Order
         default_order = [x.strip() for x in self.cfg.DEFAULT_SECTION_ORDER.split(',')]
@@ -879,6 +1024,8 @@ class SettingsWindow(BasePage):
             ",".join(new_order),
             section_states
         )
+        self.cfg.set('ItemOverlay', 'show_completed_hideout_reqs', self.chk_completed_hideout.isChecked())
+        self.cfg.set('ItemOverlay', 'show_completed_project_reqs', self.chk_completed_project.isChecked())
 
         self.cfg.set_quest_overlay_settings(
             self.quest_font_size.value(),
@@ -904,4 +1051,26 @@ class SettingsWindow(BasePage):
         if self.on_save_callback: self.on_save_callback()
         QMessageBox.information(self, "Saved", "Settings saved successfully.")
 
-    def set_update_status(self, text): self.update_status_label.setText(text)
+    def set_update_status(self, msg):
+        self.update_status_label.setText(msg)
+        # If we see a success message, refresh the timestamp
+        if "Successfully" in msg:
+            self._refresh_last_updated_text()
+
+    def _refresh_last_updated_text(self):
+        """Reads data_version.json and updates the label."""
+        try:
+            version_path = os.path.join(Constants.DATA_DIR, 'data_version.json')
+            if os.path.exists(version_path):
+                with open(version_path, 'r') as f:
+                    data = json.load(f)
+                    ts = data.get('last_updated')
+                    if ts:
+                        # Format ISO date nicely if possible, or just raw
+                        # ISO: 2025-05-21T14:30:00Z -> 2025-05-21 14:30
+                        clean_ts = ts.replace('T', ' ').replace('Z', '')
+                        self.last_updated_lbl.setText(f"Last Updated: {clean_ts}")
+                        return
+            self.last_updated_lbl.setText("Last Updated: Never")
+        except:
+            self.last_updated_lbl.setText("Last Updated: Unknown")

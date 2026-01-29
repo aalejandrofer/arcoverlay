@@ -29,20 +29,68 @@ class UpdateChecker(QObject):
                 return {}
         return {}
 
+    def get_remote_commit_date(self):
+        """Fetches the latest commit date from the GitHub repository."""
+        try:
+            repo_api_url = "https://api.github.com/repos/RaidTheory/arcraiders-data/commits/main"
+            response = requests.get(repo_api_url, timeout=10)
+            response.raise_for_status()
+            commit_data = response.json()
+            # ISO 8601 format: YYYY-MM-DDTHH:MM:SSZ
+            date_str = commit_data['commit']['committer']['date']
+            return date_str
+        except Exception as e:
+            print(f"Error fetching remote date: {e}")
+            return None
+
+    def get_local_data_date(self):
+        """Reads the locally saved last-update timestamp."""
+        version_path = os.path.join(Constants.DATA_DIR, 'data_version.json')
+        if os.path.exists(version_path):
+            try:
+                with open(version_path, 'r') as f:
+                    data = json.load(f)
+                    return data.get('last_updated')
+            except: pass
+        return None
+
+    def save_local_data_date(self, date_str):
+        """Saves the current timestamp as the last update time."""
+        version_path = os.path.join(Constants.DATA_DIR, 'data_version.json')
+        try:
+            with open(version_path, 'w') as f:
+                json.dump({'last_updated': date_str}, f)
+        except Exception as e:
+            print(f"Error saving local date: {e}")
+
     def run_check(self):
         """Checks if we can reach GitHub, then offers a full refresh since versions.json is deprecated."""
         self.checking_for_updates.emit()
-        
+        # Just check connection for the manual button
         try:
-            # Check if we can reach the repo
             repo_api_url = "https://api.github.com/repos/RaidTheory/arcraiders-data"
-            response = requests.get(repo_api_url, timeout=10)
-            response.raise_for_status()
-            # Inform user that we'll perform a full sync
+            requests.get(repo_api_url, timeout=10).raise_for_status()
             self.update_check_finished.emit([{'path': 'FULL_SYNC', 'sha': 'zip'}], "Connection established. A full data refresh is available.")
         except requests.exceptions.RequestException as e:
             self.update_check_finished.emit([], f"Error: Could not connect to GitHub. ({e})")
-            return
+
+    def check_for_updates_startup(self):
+        """
+        Signals update_available(True/False, msg) based on date comparison.
+        Intended for automatic startup check.
+        """
+        remote_date = self.get_remote_commit_date()
+        if not remote_date:
+            return # Silent fail on startup
+
+        local_date = self.get_local_data_date()
+        
+        # Simple string comparison works for ISO 8601
+        if local_date is None or remote_date > local_date:
+            self.update_check_finished.emit([{'path': 'FULL_SYNC', 'sha': 'zip'}], f"New data available ({remote_date})")
+        else:
+            # Up to date
+            pass
 
     def download_updates(self, files_to_download):
         """Downloads the entire database as a ZIP and extracts it, replacing the old incremental logic."""
@@ -102,6 +150,12 @@ class UpdateChecker(QObject):
                             updated_count += 1
 
             self.update_complete.emit(True, f"Successfully synced {updated_count} files from GitHub. Please restart.")
+            
+            # Save the remote timestamp as local version
+            remote_date = self.get_remote_commit_date()
+            if remote_date:
+                self.save_local_data_date(remote_date)
+
         except Exception as e:
             self.update_complete.emit(False, f"Update failed: {str(e)}")
 

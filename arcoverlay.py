@@ -197,6 +197,34 @@ class ArcOverlayApp(QObject):
         """Starts hotkeys and app update checks after data is verified."""
         self._start_hotkey_service()
         # self.check_for_app_updates(manual=False)
+        
+        # Check for DATA updates on startup
+        self.run_startup_data_check()
+
+    def run_startup_data_check(self):
+        """Checks GitHub for data updates silently."""
+        self.startup_updater = UpdateChecker()
+        self.startup_thread = QThread()
+        self.startup_updater.moveToThread(self.startup_thread)
+        
+        self.startup_updater.update_check_finished.connect(self._on_startup_check_finished)
+        self.startup_thread.started.connect(self.startup_updater.check_for_updates_startup)
+        self.startup_thread.finished.connect(self.startup_thread.deleteLater)
+        self.startup_thread.start()
+
+    def _on_startup_check_finished(self, files, msg):
+        """Handles the result of the startup check."""
+        self.startup_thread.quit()
+        if files: # Means update available
+            # We reuse the manual check logic but prompt first
+            reply = QMessageBox.question(
+                None, 
+                "Data Update Available", 
+                f"{msg}\n\nWould you like to update the game data now?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            )
+            if reply == QMessageBox.StandardButton.Yes:
+                self.run_manual_data_check(initial=False)
 
     def on_tray_icon_activated(self, reason):
         if reason == QSystemTrayIcon.ActivationReason.Trigger:

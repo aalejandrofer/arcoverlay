@@ -24,8 +24,7 @@ class DatabaseManager:
                     item_id TEXT PRIMARY KEY,
                     stash_count INTEGER DEFAULT 0,
                     is_tracked BOOLEAN DEFAULT 0,
-                    note TEXT DEFAULT '',
-                    tags TEXT DEFAULT ''
+                    note TEXT DEFAULT ''
                 )
             ''')
 
@@ -71,16 +70,15 @@ class DatabaseManager:
     def get_item_data(self, item_id):
         with self._get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT stash_count, is_tracked, note, tags FROM items_tracking WHERE item_id = ?", (item_id,))
+            cursor.execute("SELECT stash_count, is_tracked, note FROM items_tracking WHERE item_id = ?", (item_id,))
             row = cursor.fetchone()
             if row:
                 return {
                     'stash_count': row[0],
                     'is_tracked': bool(row[1]),
-                    'note': row[2],
-                    'tags': row[3].split(',') if row[3] else []
+                    'note': row[2]
                 }
-            return {'stash_count': 0, 'is_tracked': False, 'note': '', 'tags': []}
+            return {'stash_count': 0, 'is_tracked': False, 'note': ''}
 
     def set_item_stash(self, item_id, count):
         with self._get_connection() as conn:
@@ -112,22 +110,13 @@ class DatabaseManager:
             ''', (item_id, note))
             conn.commit()
 
-    def set_item_tags(self, item_id, tags):
-        tags_str = ",".join(tags)
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute('''
-                INSERT INTO items_tracking (item_id, tags) 
-                VALUES (?, ?) 
-                ON CONFLICT(item_id) DO UPDATE SET tags = EXCLUDED.tags
-            ''', (item_id, tags_str))
-            conn.commit()
+
 
     def get_all_tracked_items(self):
         with self._get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT item_id, tags FROM items_tracking WHERE is_tracked = 1")
-            return {row[0]: {'tags': row[1].split(',') if row[1] else []} for row in cursor.fetchall()}
+            cursor.execute("SELECT item_id FROM items_tracking WHERE is_tracked = 1")
+            return {row[0]: {} for row in cursor.fetchall()}
 
     def get_all_stash(self):
         with self._get_connection() as conn:

@@ -12,21 +12,6 @@ from .settings_window import SettingsWindow
 from .ui_components import set_dark_title_bar, ensure_window_within_screen
 import random
 
-class AboutTab(QWidget):
-    def __init__(self, app_version, check_update_func=None):
-        super().__init__()
-        layout = QVBoxLayout(self); layout.setContentsMargins(20, 20, 20, 20); layout.setSpacing(15)
-        title_lbl = QLabel("Arc Overlay"); title_lbl.setStyleSheet("font-size: 28px; font-weight: bold; color: #E5C07B;"); title_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter); layout.addWidget(title_lbl)
-        version_lbl = QLabel(f"Version: {app_version}"); version_lbl.setStyleSheet("font-size: 16px; color: #ABB2BF;"); version_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter); layout.addWidget(version_lbl)
-        layout.addSpacing(10)
-        def make_link(text, url, subtext=None):
-            lbl = QLabel(f"<a href='{url}' style='color: #61AFEF; text-decoration: none;'>{text}</a>")
-            if subtext: lbl.setText(f"{subtext} <a href='{url}' style='color: #61AFEF; text-decoration: none;'>{text}</a>")
-            lbl.setOpenExternalLinks(True); lbl.setFont(QFont("Segoe UI", 14)); lbl.setAlignment(Qt.AlignmentFlag.AlignCenter); return lbl
-        layout.addWidget(make_link("Source Code", "https://github.com/aalejandrofer/arcoverlay"))
-        layout.addWidget(make_link("RaidTheory/arcraiders-data", "https://github.com/RaidTheory/arcraiders-data", "Special thanks to:"))
-        layout.addStretch()
-
 class ProgressHubWindow(QWidget):
     # This signal bubbles up auto-saves from children tabs to the main app
     progress_saved = pyqtSignal()
@@ -78,8 +63,7 @@ class ProgressHubWindow(QWidget):
         self.quest_tab = QuestManagerWindow(self.data_manager, self.data_manager.user_progress, lang_code=self.lang_code)
         self.project_tab = ProjectManagerWindow(self.data_manager.project_data, self.data_manager.user_progress, self.data_manager, Constants.RARITY_COLORS, lang_code=self.lang_code)
         self.item_db_tab = ItemDatabaseWindow(self.data_manager, lang_code=self.lang_code)
-        self.settings_tab = SettingsWindow(self.config_manager, data_manager=self.data_manager, on_save_callback=settings_callback)
-        self.about_tab = AboutTab(app_version, app_update_checker_func)
+        self.settings_tab = SettingsWindow(self.config_manager, data_manager=self.data_manager, on_save_callback=settings_callback, app_version=app_version, update_callback=app_update_checker_func)
 
         # Add Tabs
         self.tabs.addTab(self.quest_tab, "Quests")
@@ -87,7 +71,6 @@ class ProgressHubWindow(QWidget):
         self.tabs.addTab(self.project_tab, "Projects")
         self.tabs.addTab(self.item_db_tab, "Item Database")
         self.tabs.addTab(self.settings_tab, "Settings")
-        self.tabs.addTab(self.about_tab, "About")
         
         # Connect signals
         self.settings_tab.data_restored.connect(self.on_data_restored)

@@ -170,8 +170,6 @@ class ProjectManagerWindow(BasePage):
             self.tabs.addTab(placeholder, "Empty")
             return
 
-
-
         for project in self.project_data:
             # Filter inactive projects
             if not self.chk_show_past.isChecked():
@@ -211,22 +209,6 @@ class ProjectManagerWindow(BasePage):
             
             # Add Project Title inside the tab as well
             content_layout.addWidget(QLabel(display_name, objectName="Header"))
-            
-            # Only show "Empty" if we actually added no tabs
-        if self.tabs.count() == 0:
-            placeholder = QWidget()
-            layout = QVBoxLayout(placeholder)
-            layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            
-            msg = QLabel("NO ACTIVE PROJECTS")
-            msg.setStyleSheet("font-size: 16pt; font-weight: bold; color: #5C6370;")
-            layout.addWidget(msg)
-            
-            info = QLabel("Check 'Show Past Projects' to see old events.")
-            info.setStyleSheet("color: #ABB2BF; margin-bottom: 20px;")
-            layout.addWidget(info)
-            
-            self.tabs.addTab(placeholder, "Empty")
             
             for phase_info in sorted(project.get('phases', []), key=lambda x: x.get('phase', 0)):
                 phase_num = phase_info.get('phase', 0)
@@ -327,9 +309,23 @@ class ProjectManagerWindow(BasePage):
                         w_layout.addLayout(row)
                 
                 wrapper.setProperty("btn_complete", btn_complete)
-        
-        # Add a stretch to the end of each tab to push content up if needed? 
-        # Actually QScrollArea handles it.
+
+        # Only show "Empty" if we actually added no tabs
+        if self.tabs.count() == 0:
+            placeholder = QWidget()
+            layout = QVBoxLayout(placeholder)
+            layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            
+            msg = QLabel("NO ACTIVE PROJECTS")
+            msg.setStyleSheet("font-size: 16pt; font-weight: bold; color: #5C6370;")
+            layout.addWidget(msg)
+            
+            info = QLabel("Check 'Show Past Projects' to see old events.")
+            info.setStyleSheet("color: #ABB2BF; margin-bottom: 20px;")
+            layout.addWidget(info)
+            
+            self.tabs.addTab(placeholder, "Empty")
+            
         self.refresh_visibility()
 
     def _on_inventory_changed(self, p_id, phase_num, item_id):

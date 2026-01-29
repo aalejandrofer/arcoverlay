@@ -106,6 +106,8 @@ class Constants:
     PROJECT_ICON_PATH = os.path.join(_ASSETS_DIR, 'project_icon.png')
     RECYCLE_ICON_PATH = os.path.join(_ASSETS_DIR, 'recycle_icon.png')
     SALVAGE_ICON_PATH = os.path.join(_ASSETS_DIR, 'recycle_icon.png') # Using recycle icon as fallback/shared for now
+    TRADER_ICON_PATH = COIN_ICON_PATH
+    CRAFT_ICON_PATH = RECYCLE_ICON_PATH
     
     # Validation helper to avoid UI crashes
     @classmethod
