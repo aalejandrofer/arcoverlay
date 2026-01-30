@@ -1,7 +1,7 @@
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLineEdit, 
     QScrollArea, QGridLayout, QLabel, QComboBox, QFrame, QSplitter, 
-    QTextEdit, QSizePolicy, QProgressBar
+    QTextEdit, QSizePolicy, QProgressBar, QGraphicsOpacityEffect
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QThread, QTimer, QObject
 from PyQt6.QtGui import QPixmap, QColor
@@ -120,7 +120,11 @@ class ItemGridCard(QFrame):
             hover_border = self.rarity_color
         
         # Apply greying effect for collected blueprints
-        opacity = "0.4" if (self.is_bp and self.is_collected) else "1.0"
+        # Using QGraphicsOpacityEffect for real transparency as CSS opacity isn't standard for QWidget
+        op_val = 0.25 if (self.is_bp and self.is_collected) else 1.0
+        effect = QGraphicsOpacityEffect(self)
+        effect.setOpacity(op_val)
+        self.setGraphicsEffect(effect)
             
         self.setStyleSheet(f"""
             QFrame {{ 
@@ -128,12 +132,10 @@ class ItemGridCard(QFrame):
                 border: {border}; 
                 border-top: 3px solid {self.rarity_color}; 
                 border-radius: 8px;
-                opacity: {opacity};
             }} 
             QFrame:hover {{ 
                 background: {bg_hover}; 
                 border-color: {hover_border};
-                opacity: {opacity};
             }}
         """)
 

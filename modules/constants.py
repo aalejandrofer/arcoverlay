@@ -330,6 +330,24 @@ class Constants:
         background: rgba(255, 255, 255, 0.05);
         margin: 4px 8px;
     }
+
+    QPushButton#action_button_green {
+        background-color: rgba(68, 118, 237, 0.2);
+        border: 1px solid #4476ED;
+        color: #4476ED;
+    }
+    QPushButton#action_button_green:hover {
+        background-color: rgba(68, 118, 237, 0.3);
+    }
+
+    QPushButton#action_button_red {
+        background-color: rgba(224, 108, 117, 0.2);
+        border: 1px solid #E06C75;
+        color: #E06C75;
+    }
+    QPushButton#action_button_red:hover {
+        background-color: rgba(224, 108, 117, 0.3);
+    }
     """
 
     RARITY_COLORS = {

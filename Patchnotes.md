@@ -4,14 +4,21 @@
 
 ### Fixed
 
+- **Hideout Progress**: Fixed a critical bug where Hideout station levels were not saving to the database unless items were also stored in the station.
 - **Migration Bug**: Fixed undefined variable bug in `data_manager.py` that could crash during JSON to SQLite migration when tracked items were stored in dict format.
 - **Platform Safety**: Added Windows platform check in screen capture module to prevent crashes on macOS/Linux with a clear error message.
+- **Overlay Crash**: Fixed a critical bug causing the item overlay to crash immediately upon scanning an item due to a missing method in the overlay class.
+- **OCR Accuracy**: Optimized scan accuracy by attempting a precise 800px area first, then falling back to a larger 1200px area if no item is found. This prevents accidental detection of adjacent UI elements while ensuring larger tooltips are still captured.
+- **UI Styling**: Fixed missing styles for "Complete Phase" (Green) and "Re-Open" (Red) buttons in the Project Manager, ensuring they display their active state correctly.
+- **Debug Improvements**: Added detailed debug logging for Project Requirement lookups to help diagnose missing overlay info.
 
 ### Changed
 
+- **Database Integrity System**: Added a new helper module that automatically acts as a safety net during database updates, applying hotfixes to known incorrect data entries (Example: Automatically disabling the deprecated "Expedition Project Season 1").
 - **Dependency Cleanup**: Removed unused `pystray` package from dependencies (PyQt6's `QSystemTrayIcon` is used instead).
 - **Performance**: Added caching for language-filtered items in the scanner to avoid rebuilding the list on every scan.
 - **OCR Caching**: Added LRU cache for OCR results to skip expensive Tesseract calls when hovering the same item repeatedly.
+- **Visual Tweaks**: Collected blueprints in the item database now display at 25% opacity (previously 40%) to clearly distinguish them from uncollected items.
 
 ## [1.3.3] - 2026-01-29
 

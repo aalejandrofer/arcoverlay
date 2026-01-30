@@ -201,8 +201,11 @@ class DataManager:
                 self.db.set_project_progress(pid, pdata.get('completed_phase', 0), pdata.get('inventory', {}))
 
             hideout_inv = self.user_progress.get('hideout_inventory', {})
-            for sid, sinv in hideout_inv.items():
+            for station in self.hideout_data:
+                sid = station.get('id')
+                if not sid: continue
                 lvl = self.user_progress.get(sid, 0)
+                sinv = hideout_inv.get(sid, {})
                 self.db.set_hideout_progress(sid, lvl, sinv)
 
             # State
@@ -384,6 +387,10 @@ class DataManager:
         if not target_item or 'id' not in target_item: return []
         tid = target_item['id']
         p_prog = self.user_progress.get('projects', {})
+        
+        # DEBUG PRINT
+        print(f"[DEBUG] Searching project reqs for {tid} ({item_name})")
+
         for proj in self.project_data:
             pid = proj.get('id')
             pname = self.get_localized_name(proj, lang_code)
@@ -393,11 +400,24 @@ class DataManager:
             
             prog = p_prog.get(pid, {'completed_phase': 0, 'inventory': {}})
             comp_phase, inv = prog.get('completed_phase', 0), prog.get('inventory', {})
+            
+            # DEBUG PRINT
+            if pid == 'trophy_display_project':
+                print(f"[DEBUG] Checking Trophy Display. Comp Phase: {comp_phase}")
+
             for phase in proj.get('phases', []):
                 pnum = phase.get('phase', 0)
+                
+                # DEBUG PRINT
+                if pid == 'trophy_display_project':
+                    print(f"[DEBUG]   Phase {pnum}. Skip? {pnum <= comp_phase}")
+
                 if pnum <= comp_phase: continue
                 req_type = 'next' if pnum == comp_phase + 1 else 'future'
                 for req in phase.get('requirementItemIds', []):
+                    if pid == 'trophy_display_project' and req.get('itemId') == tid:
+                        print(f"[DEBUG]     FOUND MATCH! Needed: {req.get('quantity')}")
+
                     if req.get('itemId') == tid:
                         needed = req.get('quantity', 0)
                         owned = inv.get(str(pnum), {}).get(req.get('itemId'), 0)

@@ -210,13 +210,31 @@ class ItemScanner:
 
     def scan_screen(self, full_screen: bool = False) -> Optional[Dict[str, Any]]:
         """
-        Captures screen, processes image, runs OCR, finds item, and gathers all data.
-        Returns a dictionary of item data or None if nothing found.
+        Public wrapper for scanning.
+        Attempts to scan with a tight 800px window first.
+        If no match is found, falls back to a 1200px window.
         """
         # If user setting says full screen mode is ON, override the parameter
         if self.full_screen_mode:
             full_screen = True
 
+        if full_screen:
+            return self._execute_scan(full_screen=True)
+        
+        # ATTEMPT 1: Tight 800px scan
+        if self.cmd_config.debug: print("[DEBUG] Attempting scan at 800px...")
+        result = self._execute_scan(full_screen=False, search_size=800)
+        if result: 
+            return result
+
+        # ATTEMPT 2: Fallback to 1200px
+        if self.cmd_config.debug: print("[DEBUG] No match at 800px. Retrying with 1200px...")
+        return self._execute_scan(full_screen=False, search_size=1200)
+
+    def _execute_scan(self, full_screen: bool = False, search_size: int = 800) -> Optional[Dict[str, Any]]:
+        """
+        Actual implementation of the scanning process.
+        """
         # Prepare Debug Paths
         debug_path = None
         debug_prefix = None
@@ -226,8 +244,8 @@ class ItemScanner:
             debug_prefix = datetime.now().strftime("%Y%m%d_%H%M%S")
 
         # 1. Capture Image
-        # The ImageProcessor now uses MSS (Fast) + OpenCV (Accuracy)
-        img = ImageProcessor.capture_and_process(self.target_color, full_screen=full_screen, debug_path=debug_path, debug_prefix=debug_prefix)
+        # Pass the search_size to the processor
+        img = ImageProcessor.capture_and_process(self.target_color, full_screen=full_screen, debug_path=debug_path, debug_prefix=debug_prefix, search_area_size=search_size)
         
         if img is None:
             return None

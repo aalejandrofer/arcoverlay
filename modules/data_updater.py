@@ -61,8 +61,13 @@ class DataUpdateWorker(QObject):
 
             if os.path.exists(temp_zip):
                 os.remove(temp_zip)
-                
-            self.finished.emit(True, "Update successful!")
+            
+            # --- APPLY DATABASE FIXES ---
+            from .database_fixer import DatabaseFixer
+            self.status.emit("Applying fixes...")
+            fix_count = DatabaseFixer.apply_fixes(self.target_dir)
+            
+            self.finished.emit(True, f"Update successful! ({fix_count} fixes applied)")
             
         except Exception as e:
             if os.path.exists(temp_zip):

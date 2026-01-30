@@ -477,6 +477,7 @@ class BaseOverlay(QWidget):
         self.adjustSize()
         self.resize(self.container.sizeHint())
 
+    def check_mouse_distance(self):
         mouse_pos = QCursor.pos()
         rect = self.frameGeometry()
 
@@ -513,6 +514,17 @@ class BaseOverlay(QWidget):
         end_pos = QPoint(x, y)
         start_pos = QPoint(x, y + 30)
         self.show_animated(start_pos, end_pos)
+
+    def add_label(self, text, font_size, is_bold=False, color="#FFFFFF"):
+        lbl = QLabel(text)
+        lbl.setWordWrap(True)
+        style = f"color: {color}; font-size: {font_size}pt;"
+        if is_bold: style += " font-weight: bold;"
+        lbl.setStyleSheet(style)
+        self.container_layout.addWidget(lbl)
+
+    def add_separator(self):
+        OverlayRenderer._add_separator(self.container_layout)
 
 class ItemOverlay(BaseOverlay):
     def __init__(self, item_data, user_settings, blueprint_required, hideout_reqs, project_reqs, trade_info, data_manager, user_note="", lang_code="en", stash_count=0, is_collected_blueprint=False, is_active_quest_item=False, quest_reqs=None):

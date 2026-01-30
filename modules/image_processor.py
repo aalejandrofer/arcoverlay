@@ -53,7 +53,7 @@ class ImageProcessor:
         return (x1, y1, x2, y2)
 
     @staticmethod
-    def capture_and_process(target_color: Optional[Tuple[int, int, int]], full_screen: bool = False, debug_path: str = None, debug_prefix: str = None):
+    def capture_and_process(target_color: Optional[Tuple[int, int, int]], full_screen: bool = False, debug_path: str = None, debug_prefix: str = None, search_area_size: int = 800):
         # Platform check - Windows-only due to ctypes.windll usage
         if sys.platform != 'win32':
             print("[ERROR] Screen capture is only supported on Windows.")
@@ -90,7 +90,7 @@ class ImageProcessor:
                     # For multi-monitor "around cursor", we just need valid global coordinates
                     # mss handles global coordinates fine without needing specific monitor index
 
-                    search_width, search_height = 1200, 1200
+                    search_width, search_height = search_area_size, search_area_size
 
                     left = int(max(0, pt.x - search_width // 2))
                     top = int(max(0, pt.y - search_height // 2))
