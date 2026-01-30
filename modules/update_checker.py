@@ -148,6 +148,11 @@ class UpdateChecker(QObject):
                             with zip_ref.open(zip_info) as source, open(dest_path, "wb") as target:
                                 shutil.copyfileobj(source, target)
                             updated_count += 1
+            
+            # --- APPLY DATABASE FIXES ---
+            from .database_fixer import DatabaseFixer
+            fix_count = DatabaseFixer.apply_fixes(Constants.DATA_DIR)
+            print(f"[INFO] Applied {fix_count} database fixes.")
 
             self.update_complete.emit(True, f"Successfully synced {updated_count} files from GitHub. Please restart.")
             
